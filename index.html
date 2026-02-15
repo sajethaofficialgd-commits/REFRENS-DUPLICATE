@@ -1,168 +1,88 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Invoice Generator</title>
+  <title>Pro Invoice Suite</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="page-bg"></div>
-  <main class="app-shell">
-    <header class="page-header">
-      <h1>Invoice</h1>
-      <div class="header-actions">
-        <button class="ghost-btn" type="button" id="printInvoice">Download / Print</button>
+  <div class="app">
+    <header class="top-header">
+      <div class="top-left">
+        <div class="brand-mark">PI</div>
+        <div class="brand-copy">
+          <strong>Pro Invoice</strong>
+          <small>Invoice Intelligence Platform</small>
+        </div>
+        <select id="orgSwitcher" class="field">
+          <option value="org_1">Grofast Digital</option>
+          <option value="org_2">GD Commerce LLP</option>
+        </select>
+      </div>
+
+      <div class="top-center">
+        <input id="globalSearch" class="field" type="search" placeholder="Search invoices, clients, amount..." />
+      </div>
+
+      <div class="top-right">
+        <button class="icon-btn" id="toggleTheme" type="button" title="Toggle theme">Theme</button>
+        <button class="icon-btn" id="openTemplates" type="button" title="Invoice templates">Templates</button>
+        <button class="icon-btn" id="openNotifications" type="button" title="Notifications">Alerts <span id="notifCount">0</span></button>
+        <button class="primary-btn" id="createInvoiceTop" type="button">+ Create Invoice</button>
+        <button class="profile-chip" type="button">SK</button>
       </div>
     </header>
 
-    <section class="meta-card card">
-      <div class="meta-grid">
-        <label>
-          <span>Invoice Number</span>
-          <input type="text" id="invoiceNumber" value="INV-001" />
-        </label>
-        <label>
-          <span>Date</span>
-          <input type="date" id="invoiceDate" />
-        </label>
-        <label>
-          <span>Payment Terms</span>
-          <select id="paymentTerms">
-            <option value="0">Due on Receipt</option>
-            <option value="7">Net 7</option>
-            <option value="15">Net 15</option>
-            <option value="30" selected>Net 30</option>
-          </select>
-        </label>
-        <label>
-          <span>Due Date</span>
-          <input type="date" id="dueDate" />
-        </label>
+    <div class="app-body">
+      <aside class="left-nav">
+        <button class="nav-btn active" data-nav="dashboard" type="button">Dashboard</button>
+        <button class="nav-btn" data-nav="editor" type="button">Create/Edit</button>
+        <button class="nav-btn" data-nav="view" type="button">View Invoice</button>
+        <button class="nav-btn" id="runAutomation" type="button">Run Automation</button>
+        <button class="nav-btn" id="exportCsv" type="button">Export CSV</button>
+      </aside>
+
+      <main class="screen" id="screenRoot"></main>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="clientModal" role="dialog" aria-modal="true" aria-labelledby="clientModalTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="clientModalTitle">Add New Client</h3>
+        <button type="button" class="icon-btn" id="closeClientModal">Close</button>
       </div>
-    </section>
-
-    <section class="party-card card">
-      <div class="party-grid">
-        <div class="party-column">
-          <h2>Billed By</h2>
-          <label><span>Business / Name</span><input type="text" id="fromName" placeholder="Your business" /></label>
-          <label><span>Country</span><input type="text" id="fromCountry" placeholder="India" /></label>
-          <label><span>Address</span><textarea id="fromAddress" rows="3" placeholder="Street address"></textarea></label>
-          <div class="party-split">
-            <label><span>City</span><input type="text" id="fromCity" /></label>
-            <label><span>Postal Code</span><input type="text" id="fromZip" /></label>
-          </div>
-          <label><span>State</span><input type="text" id="fromState" /></label>
-          <div class="inline-actions">
-            <button type="button" class="inline-btn" data-target="fromEmail">+ Add Email</button>
-            <button type="button" class="inline-btn" data-target="fromPhone">+ Add Phone</button>
-            <button type="button" class="inline-btn" data-target="fromGst">+ Add GSTIN</button>
-          </div>
-          <div class="optional-fields">
-            <label class="hidden" id="fromEmailWrap"><span>Email</span><input type="email" id="fromEmail" /></label>
-            <label class="hidden" id="fromPhoneWrap"><span>Phone</span><input type="text" id="fromPhone" /></label>
-            <label class="hidden" id="fromGstWrap"><span>GSTIN</span><input type="text" id="fromGst" /></label>
-          </div>
+      <form id="clientForm" class="form-grid">
+        <label>Name<input class="field" name="name" required /></label>
+        <label>Company<input class="field" name="company" /></label>
+        <label>Phone<input class="field" name="phone" /></label>
+        <label>Email<input class="field" type="email" name="email" /></label>
+        <label>Tax Number<input class="field" name="taxNumber" /></label>
+        <label class="wide">Address<textarea class="field" name="address" rows="3"></textarea></label>
+        <div class="wide modal-actions">
+          <button type="submit" class="primary-btn">Save Client</button>
         </div>
+      </form>
+    </div>
+  </div>
 
-        <div class="party-column">
-          <h2>Billed To</h2>
-          <label><span>Client / Name</span><input type="text" id="toName" placeholder="Client name" /></label>
-          <label><span>Country</span><input type="text" id="toCountry" placeholder="India" /></label>
-          <label><span>Address</span><textarea id="toAddress" rows="3" placeholder="Street address"></textarea></label>
-          <div class="party-split">
-            <label><span>City</span><input type="text" id="toCity" /></label>
-            <label><span>Postal Code</span><input type="text" id="toZip" /></label>
-          </div>
-          <label><span>State</span><input type="text" id="toState" /></label>
-          <div class="inline-actions">
-            <button type="button" class="inline-btn" data-target="toEmail">+ Add Email</button>
-            <button type="button" class="inline-btn" data-target="toPhone">+ Add Phone</button>
-            <button type="button" class="inline-btn" data-target="toGst">+ Add GSTIN</button>
-          </div>
-          <div class="optional-fields">
-            <label class="hidden" id="toEmailWrap"><span>Email</span><input type="email" id="toEmail" /></label>
-            <label class="hidden" id="toPhoneWrap"><span>Phone</span><input type="text" id="toPhone" /></label>
-            <label class="hidden" id="toGstWrap"><span>GSTIN</span><input type="text" id="toGst" /></label>
-          </div>
-        </div>
+  <div class="modal hidden" id="templateModal" role="dialog" aria-modal="true" aria-labelledby="templateModalTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="templateModalTitle">Invoice Templates Gallery</h3>
+        <button type="button" class="icon-btn" id="closeTemplateModal">Close</button>
       </div>
-    </section>
+      <div class="template-grid" id="templateGrid"></div>
+    </div>
+  </div>
 
-    <section class="items-card card">
-      <div class="items-head">
-        <h2>Items</h2>
-        <div class="items-controls">
-          <label class="toggle">
-            <input type="checkbox" id="gstEnabled" checked />
-            <span>Add GST</span>
-          </label>
-          <label>
-            <span>Currency</span>
-            <select id="currency">
-              <option value="INR" selected>INR</option>
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-              <option value="GBP">GBP</option>
-            </select>
-          </label>
-        </div>
-      </div>
+  <div class="toast hidden" id="toast"></div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 40%">Item</th>
-              <th>Qty</th>
-              <th>Rate</th>
-              <th class="gst-col">GST %</th>
-              <th>Amount</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="lineItems"></tbody>
-        </table>
-      </div>
-      <button type="button" class="inline-btn add-row" id="addItem">+ Add New Line</button>
-    </section>
-
-    <section class="summary-card card">
-      <div class="summary-grid">
-        <div class="summary-left">
-          <label><span>Terms & Conditions</span><textarea id="terms" rows="3" placeholder="Any terms or payment notes"></textarea></label>
-          <label><span>Notes</span><textarea id="notes" rows="3" placeholder="Additional notes"></textarea></label>
-        </div>
-        <div class="summary-right">
-          <label><span>Discount</span><input type="number" id="discount" min="0" value="0" /></label>
-          <label><span>Additional Charges</span><input type="number" id="additionalCharges" min="0" value="0" /></label>
-          <div class="totals">
-            <div><span>Subtotal</span><strong id="subtotalValue">0.00</strong></div>
-            <div><span>GST Total</span><strong id="gstValue">0.00</strong></div>
-            <div><span>Total Quantity</span><strong id="qtyValue">0</strong></div>
-            <div class="grand"><span>Grand Total</span><strong id="grandValue">0.00</strong></div>
-          </div>
-          <p class="total-words" id="totalWords">Zero only</p>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <template id="itemRowTemplate">
-    <tr>
-      <td><input type="text" class="item-name" placeholder="Item name / description" /></td>
-      <td><input type="number" class="item-qty" min="0" value="1" /></td>
-      <td><input type="number" class="item-rate" min="0" value="0" /></td>
-      <td class="gst-col"><input type="number" class="item-gst" min="0" value="18" /></td>
-      <td><strong class="item-amount">0.00</strong></td>
-      <td><button type="button" class="remove-btn" aria-label="Remove item">x</button></td>
-    </tr>
-  </template>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
