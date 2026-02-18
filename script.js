@@ -774,6 +774,28 @@ function renderEditor() {
       <div class="section-card">
         <div class="section-head"><h3>2 · Your Business Details</h3></div>
         <div class="section-body">
+
+          <!-- Logo upload -->
+          <div class="logo-upload-area">
+            <div class="logo-upload-label">Business Logo</div>
+            ${d.businessDetails?.logo ? `
+              <div class="logo-preview-wrap">
+                <img class="logo-preview-img" src="${d.businessDetails.logo}" alt="Business Logo" />
+                <button class="icon-btn icon-btn-danger" id="removeLogoBtn" type="button">✕ Remove</button>
+              </div>
+            ` : `
+              <label class="logo-upload-btn" for="logoFileInput">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Upload Logo
+                <input type="file" id="logoFileInput" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" style="display:none" />
+              </label>
+              <div class="logo-upload-hint">PNG, JPG, SVG · Max 2 MB · Appears on invoice PDF</div>
+            `}
+          </div>
+
           <div class="form-g3">
             <label>Business Name<input class="field" data-path="businessDetails.businessName" value="${esc(d.businessDetails?.businessName)}" /></label>
             <label>GSTIN<input class="field" data-path="businessDetails.gstin" value="${esc(d.businessDetails?.gstin)}" placeholder="22AAAAA0000A1Z5" style="text-transform:uppercase" /></label>
@@ -1291,6 +1313,25 @@ function bindEditorEvents() {
     markDirty(); renderEditor();
   });
 
+  // Logo upload
+  document.getElementById("logoFileInput")?.addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { showToast("Logo must be under 2 MB."); return; }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      d.businessDetails.logo = ev.target.result;
+      getCurrentOrg().business.logo = ev.target.result;
+      saveState(); markDirty(); renderEditor();
+    };
+    reader.readAsDataURL(file);
+  });
+  document.getElementById("removeLogoBtn")?.addEventListener("click", () => {
+    d.businessDetails.logo = "";
+    getCurrentOrg().business.logo = "";
+    saveState(); markDirty(); renderEditor();
+  });
+
   // Add client btn
   document.getElementById("addClientBtn")?.addEventListener("click", () => showModal("clientModal"));
 
@@ -1753,6 +1794,7 @@ function buildPreviewHtml(invoice, t) {
     <div class="inv-preview-parties">
       <div class="inv-party-box">
         <h5>Billed By</h5>
+        ${invoice.businessDetails?.logo ? `<img src="${invoice.businessDetails.logo}" style="max-height:48px;max-width:120px;object-fit:contain;display:block;margin-bottom:6px;" alt="Logo" />` : ""}
         <strong>${esc(invoice.businessDetails?.businessName||"—")}</strong>
         <div>${esc(invoice.businessDetails?.address||"")}</div>
         ${invoice.businessDetails?.gstin?`<div>GSTIN: ${esc(invoice.businessDetails.gstin)}</div>`:""}
@@ -1832,6 +1874,7 @@ function buildPrintHtml(invoice, t) {
     <!-- Header -->
     <div style="${headerStyle}display:flex;justify-content:space-between;align-items:flex-start;">
       <div>
+        ${biz.logo ? `<img src="${biz.logo}" style="max-height:64px;max-width:180px;object-fit:contain;display:block;margin-bottom:8px;" alt="Logo" />` : ""}
         <div style="font-size:14px;font-weight:800;color:${(tmpl==="modern"||tmpl==="bold")?"#fff":color};">${esc(biz.businessName||"Business Name")}</div>
         <div style="font-size:11px;color:${bizAddrColor};margin-top:4px;max-width:260px;">${esc(biz.address||"")}</div>
         ${biz.gstin?`<div style="font-size:10px;color:${bizAddrColor};margin-top:2px;">GSTIN: ${esc(biz.gstin)}</div>`:""}
