@@ -4,7 +4,7 @@
    ============================================================ */
 
 // ── CONSTANTS ────────────────────────────────────────────────
-const STORAGE_KEY  = "refrens_invoice_v2";
+const STORAGE_KEY  = "refrens_invoice_v3";
 const AUTOSAVE_MS  = 4000;
 
 const INDIAN_STATES = [
@@ -60,7 +60,7 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const p = JSON.parse(raw);
-      if (p && p.version === 2) return p;
+      if (p && p.version === 3) return p;
     }
   } catch (_) {}
   return createInitialState();
@@ -97,100 +97,25 @@ function createInitialState() {
     },
   ];
 
-  const clients = [
-    {
-      id: "cli_1", orgId: "org_1",
-      name: "MR FITNESS", companyName: "MR FITNESS", clientType: "Company",
-      taxTreatment: "Registered", gstin: "33AAACM8812J1Z2", pan: "",
-      phone: "+91 90036 39222", email: "owner@mrfitness.in",
-      state: "Tamil Nadu",
-      address: "No 5/8, Teachers Colony, Hosur, Tamil Nadu - 635 109",
-    },
-    {
-      id: "cli_2", orgId: "org_1",
-      name: "S7 Cars India Pvt.", companyName: "S7 Cars India Pvt.", clientType: "Company",
-      taxTreatment: "Registered", gstin: "33AAKCS9123Q1ZG", pan: "",
-      phone: "+91 81223 11118", email: "accounts@s7cars.in",
-      state: "Tamil Nadu",
-      address: "Bangalore Road, Hosur, Tamil Nadu - 635 109",
-    },
-  ];
+  const clients = [];
 
-  const now = new Date().toISOString();
-
-  const invoices = [
-    {
-      id: "inv_1", orgId: "org_1",
-      invoiceNumber: "INV-002", invoiceType: "Tax Invoice",
-      issueDate: "2026-02-14", dueDate: "2026-02-21",
-      placeOfSupply: "Tamil Nadu", currency: "INR", reference: "PO-MR-95",
-      businessDetails: { ...orgs[0].business },
-      clientId: "cli_1", clientDetails: { ...clients[0] },
-      lineItems: [
-        { id:"li_1", itemName:"Meta Ad Campaign Management", description:"30-day service charge", hsn:"998311", quantity:12, unit:"months", unitPrice:20000, discount:0, taxPercent:18 },
-        { id:"li_2", itemName:"Business Automation System", description:"CRM & workflow setup", hsn:"998314", quantity:12, unit:"months", unitPrice:5000, discount:0, taxPercent:18 },
-      ],
-      invoiceDiscount: { type:"percent", value:0, label:"Discount" },
-      charges: [],
-      tds: { enabled:false, type:"percent", value:2, label:"TDS" },
-      roundOff: false,
-      paymentInfo: { terms:"Net 7", customDays:7, showBank:true, showUpi:true, paymentLink:"" },
-      notes: "Thank you for your trust and continued support.",
-      terms: "50% advance required. Balance due within 7 days of invoice date.",
-      amountPaid: 0,
-      status: "Sent", deleted: false,
-      recurring: { enabled:true, interval:"monthly", nextRun:"2026-03-14" },
-      timeline: [
-        { status:"Created", at:now },
-        { status:"Sent", at:now },
-      ],
-      activity: [
-        { at:now, text:"Invoice created." },
-        { at:now, text:"Invoice sent to client." },
-      ],
-      createdAt:now, updatedAt:now, templateId:"classic", templateColor:"#7c3aed",
-    },
-    {
-      id: "inv_2", orgId: "org_1",
-      invoiceNumber: "INV-001", invoiceType: "Tax Invoice",
-      issueDate: "2026-02-10", dueDate: "2026-02-15",
-      placeOfSupply: "Tamil Nadu", currency: "INR", reference: "PO-S7-94",
-      businessDetails: { ...orgs[0].business },
-      clientId: "cli_2", clientDetails: { ...clients[1] },
-      lineItems: [
-        { id:"li_3", itemName:"Automation Maintenance Retainer", description:"Monthly servicing & integrations", hsn:"998314", quantity:1, unit:"months", unitPrice:30000, discount:0, taxPercent:18 },
-      ],
-      invoiceDiscount: { type:"percent", value:0, label:"Discount" },
-      charges: [{ id:"ch_1", label:"Courier Charges", amount:250, taxable:false }],
-      tds: { enabled:false, type:"percent", value:2, label:"TDS" },
-      roundOff: true,
-      paymentInfo: { terms:"Net 5", customDays:5, showBank:true, showUpi:true, paymentLink:"" },
-      notes: "Please clear pending dues immediately.",
-      terms: "Payment due in 5 days.",
-      amountPaid: 0,
-      status: "Overdue", deleted: false,
-      recurring: { enabled:false, interval:"monthly", nextRun:"" },
-      timeline: [{ status:"Created", at:now }, { status:"Sent", at:now }],
-      activity: [{ at:now, text:"Invoice created." }],
-      createdAt:now, updatedAt:now, templateId:"classic", templateColor:"#7c3aed",
-    },
-  ];
+  const invoices = [];
 
   return {
-    version: 2,
+    version: 3,
     theme: "light",
     template: "classic",
     templateColor: "#7c3aed",
     currentOrgId: "org_1",
     orgs, clients, invoices,
     notifications: [
-      { id:uid("note"), at:now, text:"Ctrl+S save · Ctrl+Enter send · Ctrl+P preview · Ctrl+Z undo", read:false },
+      { id:uid("note"), at:new Date().toISOString(), text:"Ctrl+S save · Ctrl+Enter send · Ctrl+P preview · Ctrl+Z undo", read:false },
     ],
     editorDraft: null,
     ui: {
       route: "dashboard",
       dashboardTab: "active",
-      viewingId: "inv_1",
+      viewingId: "",
       selectedIds: [],
       filters: { status:"all", client:"all", startDate:"", endDate:"", minAmt:"", maxAmt:"", search:"" },
       editorDirty: false,
@@ -500,7 +425,8 @@ function bindGlobalEvents() {
     e.target.reset();
     hideModal("clientModal");
     saveState();
-    if (state.ui.route === "editor") renderEditor();
+    if (state.ui.route === "editor")  renderEditor();
+    if (state.ui.route === "clients") renderClients();
     showToast("Client saved successfully.");
   });
 
