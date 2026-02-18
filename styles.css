@@ -1095,6 +1095,92 @@ tbody tr:hover { background: var(--primary-soft); }
   margin-bottom: 14px;
 }
 
+/* ── NOTES PANELS ──────────────────────────────────────────────── */
+.notes-panels {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin-bottom: 16px;
+}
+.notes-panel-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.78rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+/* ── TERMS & CONDITIONS ───────────────────────────────────────── */
+.terms-section { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.terms-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 0.82rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.terms-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.terms-num {
+  font-size: 0.78rem; font-weight: 700; color: var(--muted);
+  min-width: 22px; text-align: right;
+}
+.terms-btns { display: flex; gap: 3px; }
+.icon-btn {
+  padding: 3px 7px; border-radius: 4px; font-size: 0.78rem;
+  background: var(--panel); border: 1px solid var(--line);
+  color: var(--text); cursor: pointer; line-height: 1.4;
+}
+.icon-btn:hover { background: var(--hover); }
+.icon-btn-danger { color: var(--danger); }
+.icon-btn-placeholder { display: inline-block; width: 28px; }
+.terms-empty {
+  color: var(--muted); font-size: 0.82rem; padding: 8px 0;
+  font-style: italic;
+}
+
+/* ── CONTACT DETAILS ROW ──────────────────────────────────────── */
+.contact-details-row {
+  margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.contact-details-label {
+  font-size: 0.78rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.contact-details-val {
+  font-size: 0.85rem; color: var(--text);
+}
+
+/* ── DISPLAY OPTIONS ──────────────────────────────────────────── */
+.display-opts-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.check-opt {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.85rem; cursor: pointer;
+}
+.check-opt input[type="checkbox"] { accent-color: var(--primary); }
+
+/* ── SIGNATURE ────────────────────────────────────────────────── */
+.signature-box {
+  margin-top: 18px; width: 180px;
+}
+.signature-line {
+  height: 1px; background: var(--text); margin-bottom: 6px;
+}
+.signature-caption {
+  font-size: 0.75rem; color: var(--muted); text-align: center;
+}
+
+/* ── SUMMARY WORDS ────────────────────────────────────────────── */
+.summary-words {
+  margin-top: 10px; padding: 10px;
+  background: var(--bg); border-radius: var(--radius-sm);
+  font-size: 0.78rem; color: var(--muted); line-height: 1.6;
+  border: 1px solid var(--line);
+}
+.summary-words span {
+  font-weight: 600; display: block; margin-bottom: 2px; color: var(--text);
+}
+.summary-words em { font-style: normal; }
+
 /* ── RESPONSIVE ──────────────────────────────────────────────── */
 @media (max-width: 1280px) {
   .metric-grid { grid-template-columns: repeat(2, 1fr); }

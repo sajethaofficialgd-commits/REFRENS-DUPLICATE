@@ -684,13 +684,16 @@ function openEditor(invoiceId = null, duplicate = false) {
       currency: org.currency, reference: "",
       businessDetails: deepCopy(org.business),
       clientId: "", clientDetails: { id:"", name:"", companyName:"", clientType:"Company", taxTreatment:"Registered", gstin:"", pan:"", phone:"", email:"", state:"", address:"" },
-      lineItems: [{ id:uid("li"), itemName:"", description:"", hsn:"", quantity:1, unit:"pcs", unitPrice:0, discount:0, taxPercent:18 }],
+      lineItems: [{ id:uid("li"), itemName:"", description:"", sku:"", hsn:"", quantity:1, unit:"pcs", unitPrice:0, discount:0, taxPercent:18 }],
       invoiceDiscount: { type:"percent", value:0, label:"Discount" },
       charges: [],
       tds: { enabled:false, type:"percent", value:2, label:"TDS" },
       roundOff: false,
       paymentInfo: { terms:"Net 30", customDays:30, showBank:true, showUpi:true, paymentLink:"" },
-      notes: "", terms: "", amountPaid: 0, status: "Draft", deleted: false,
+      notes: "", additionalInfo: "", terms: "", termsItems: [], amountPaid: 0, status: "Draft", deleted: false,
+      shipping: { enabled:false, name:"", address:"", city:"", state:"", pin:"", country:"India" },
+      displayOptions: { unitDisplay:"merge", taxSummary:"none", hidePlaceOfSupply:false, showSku:false, descriptionFullWidth:false, summariseTotalQty:false, showTotalInWords:true },
+      signature: { enabled:false, label:"Authorized Signatory" },
       recurring: { enabled:false, interval:"monthly", nextRun:"" },
       timeline: [{ status:"Created", at:new Date().toISOString() }],
       activity: [{ at:new Date().toISOString(), text:"Draft invoice initiated." }],
@@ -838,6 +841,28 @@ function renderEditor() {
         </div>
       </div>
 
+      <!-- 3.5. Shipping Details -->
+      <div class="section-card">
+        <div class="section-head">
+          <h3 style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="shippingToggle" ${d.shipping?.enabled?"checked":""} />
+            Add Shipping Details
+          </h3>
+        </div>
+        ${d.shipping?.enabled ? `
+        <div class="section-body">
+          <div class="form-g3">
+            <label>Recipient Name<input class="field" data-path="shipping.name" value="${esc(d.shipping?.name)}" placeholder="Ship to name" /></label>
+            <label>Address<input class="field" data-path="shipping.address" value="${esc(d.shipping?.address)}" placeholder="Street address" /></label>
+            <label>City<input class="field" data-path="shipping.city" value="${esc(d.shipping?.city)}" placeholder="City" /></label>
+            <label>State<input class="field" data-path="shipping.state" value="${esc(d.shipping?.state)}" placeholder="State" /></label>
+            <label>PIN Code<input class="field" data-path="shipping.pin" value="${esc(d.shipping?.pin)}" placeholder="PIN" /></label>
+            <label>Country<input class="field" data-path="shipping.country" value="${esc(d.shipping?.country||"India")}" placeholder="Country" /></label>
+          </div>
+        </div>
+        ` : ""}
+      </div>
+
       <!-- 4. Line Items -->
       <div class="section-card">
         <div class="section-head">
@@ -851,6 +876,7 @@ function renderEditor() {
                 <th style="width:30px;"></th>
                 <th style="min-width:200px;">Description</th>
                 <th style="width:80px;">HSN/SAC</th>
+                ${d.displayOptions?.showSku ? `<th style="width:80px;">SKU</th>` : ""}
                 <th style="width:65px;">Qty</th>
                 <th style="width:80px;">Unit</th>
                 <th style="width:100px;">Rate (${esc(cur)})</th>
@@ -869,6 +895,7 @@ function renderEditor() {
                     <input data-item="${i}" data-field="description" value="${esc(row.description)}" placeholder="Description (optional)" style="margin-top:4px;font-size:0.78rem;" />
                   </td>
                   <td><input data-item="${i}" data-field="hsn" value="${esc(row.hsn||"")}" placeholder="9983" /></td>
+                  ${d.displayOptions?.showSku ? `<td><input data-item="${i}" data-field="sku" value="${esc(row.sku||"")}" placeholder="SKU-001" /></td>` : ""}
                   <td><input type="number" min="0" data-item="${i}" data-field="quantity"  value="${row.qty}" /></td>
                   <td>
                     <select data-item="${i}" data-field="unit">
@@ -1005,13 +1032,110 @@ function renderEditor() {
 
       <!-- 8. Notes & Terms -->
       <div class="section-card">
-        <div class="section-head"><h3>8 · Notes &amp; Terms</h3></div>
+        <div class="section-head"><h3>8 · Notes, Terms &amp; Info</h3></div>
         <div class="section-body">
-          <div class="form-g2">
-            <label>Notes to Client<textarea class="field" rows="4" data-path="notes">${esc(d.notes)}</textarea></label>
-            <label>Terms &amp; Conditions<textarea class="field" rows="4" data-path="terms">${esc(d.terms)}</textarea></label>
+
+          <!-- Notes / Additional Info panels -->
+          <div class="notes-panels">
+            <div class="notes-panel">
+              <div class="notes-panel-head">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+                Add Notes
+              </div>
+              <textarea class="field" rows="3" data-path="notes" placeholder="Notes to client…">${esc(d.notes)}</textarea>
+            </div>
+            <div class="notes-panel">
+              <div class="notes-panel-head">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                Additional Info
+              </div>
+              <textarea class="field" rows="3" data-path="additionalInfo" placeholder="Internal notes, PO number, etc…">${esc(d.additionalInfo||"")}</textarea>
+            </div>
+          </div>
+
+          <!-- Terms & Conditions -->
+          <div class="terms-section">
+            <div class="terms-section-head">
+              <span>Terms &amp; Conditions</span>
+              <button class="secondary-btn" id="addTermBtn" type="button">+ Add New Term</button>
+            </div>
+            <div id="termsContainer">
+              ${(d.termsItems||[]).map((item, i) => `
+                <div class="terms-row">
+                  <span class="terms-num">${String(i+1).padStart(2,"0")}</span>
+                  <input class="field" data-term="${i}" value="${esc(item.text)}" placeholder="Enter term or condition…" />
+                  <div class="terms-btns">
+                    ${i > 0 ? `<button class="icon-btn" data-term-up="${i}" type="button" title="Move up">↑</button>` : `<span class="icon-btn-placeholder"></span>`}
+                    ${i < (d.termsItems.length - 1) ? `<button class="icon-btn" data-term-down="${i}" type="button" title="Move down">↓</button>` : `<span class="icon-btn-placeholder"></span>`}
+                    <button class="icon-btn icon-btn-danger" data-term-del="${i}" type="button" title="Remove">✕</button>
+                  </div>
+                </div>
+              `).join("") || `<div class="terms-empty">No terms added yet. Click "+ Add New Term" to start.</div>`}
+            </div>
+          </div>
+
+          <!-- Contact Details -->
+          <div class="contact-details-row">
+            <span class="contact-details-label">Your Contact Details</span>
+            <span class="contact-details-val">
+              For any enquiry, reach out via email at
+              <strong>${esc(d.businessDetails?.email||"—")}</strong>
+              · call on
+              <strong>${esc(d.businessDetails?.phone||"—")}</strong>
+            </span>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 9. Display Options -->
+      <div class="section-card">
+        <div class="section-head"><h3>9 · Display Options</h3></div>
+        <div class="section-body">
+          <div class="form-g2" style="margin-bottom:14px;">
+            <label>Display Unit As
+              <select class="field" data-path="displayOptions.unitDisplay">
+                <option value="merge"    ${(d.displayOptions?.unitDisplay||"merge")==="merge"?"selected":""}>Merge with quantity</option>
+                <option value="separate" ${d.displayOptions?.unitDisplay==="separate"?"selected":""}>Show separately</option>
+                <option value="hide"     ${d.displayOptions?.unitDisplay==="hide"?"selected":""}>Hide</option>
+              </select>
+            </label>
+            <label>Show Tax Summary in Invoice
+              <select class="field" data-path="displayOptions.taxSummary">
+                <option value="none"    ${(d.displayOptions?.taxSummary||"none")==="none"?"selected":""}>Do not show</option>
+                <option value="summary" ${d.displayOptions?.taxSummary==="summary"?"selected":""}>Show tax summary</option>
+                <option value="details" ${d.displayOptions?.taxSummary==="details"?"selected":""}>Show tax details</option>
+              </select>
+            </label>
+          </div>
+          <div class="display-opts-grid">
+            <label class="check-opt"><input type="checkbox" id="doHidePlaceOfSupply" ${d.displayOptions?.hidePlaceOfSupply?"checked":""}> Hide place/country of supply</label>
+            <label class="check-opt"><input type="checkbox" id="doShowSku" ${d.displayOptions?.showSku?"checked":""}> Show SKU in Invoice</label>
+            <label class="check-opt"><input type="checkbox" id="doDescFullWidth" ${d.displayOptions?.descriptionFullWidth?"checked":""}> Show description in full width</label>
+            <label class="check-opt"><input type="checkbox" id="doSummariseTotalQty" ${d.displayOptions?.summariseTotalQty?"checked":""}> Summarise Total Quantity</label>
+            <label class="check-opt"><input type="checkbox" id="doShowTotalInWords" ${d.displayOptions?.showTotalInWords!==false?"checked":""}> Show Total In Words</label>
           </div>
         </div>
+      </div>
+
+      <!-- 10. Signature -->
+      <div class="section-card">
+        <div class="section-head">
+          <h3 style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="signatureToggle" ${d.signature?.enabled?"checked":""}> Add Signature
+          </h3>
+        </div>
+        ${d.signature?.enabled ? `
+        <div class="section-body">
+          <div class="form-g3">
+            <label>Signatory Label<input class="field" data-path="signature.label" value="${esc(d.signature?.label||"Authorized Signatory")}" /></label>
+          </div>
+          <div class="signature-box">
+            <div class="signature-line"></div>
+            <div class="signature-caption">${esc(d.signature?.label||"Authorized Signatory")}</div>
+          </div>
+        </div>
+        ` : ""}
       </div>
 
     </div><!-- /editor-main -->
@@ -1043,6 +1167,11 @@ function renderEditor() {
           ${t.isIntraState?"CGST + SGST": t.isExport?"Zero-rated (Export)":"IGST"} applied
           · ${esc(d.placeOfSupply||"—")}
         </div>
+        ${d.displayOptions?.showTotalInWords!==false?`
+        <div class="summary-words">
+          <span>Total in Words</span>
+          <em>${amountInWords(t.grandTotal)}</em>
+        </div>`:``}
       </div>
 
       <!-- Template & Color -->
@@ -1164,6 +1293,66 @@ function bindEditorEvents() {
 
   // Add client btn
   document.getElementById("addClientBtn")?.addEventListener("click", () => showModal("clientModal"));
+
+  // Shipping toggle
+  document.getElementById("shippingToggle")?.addEventListener("change", e => {
+    if (!d.shipping) d.shipping = { enabled:false, name:"", address:"", city:"", state:"", pin:"", country:"India" };
+    d.shipping.enabled = e.target.checked;
+    markDirty(); renderEditor();
+  });
+
+  // Terms & Conditions
+  document.getElementById("addTermBtn")?.addEventListener("click", () => {
+    if (!d.termsItems) d.termsItems = [];
+    d.termsItems.push({ id: uid("term"), text: "" });
+    markDirty(); renderEditor();
+  });
+  root.querySelectorAll("[data-term]").forEach(el => {
+    el.addEventListener("input", () => {
+      const i = +el.dataset.term;
+      if (d.termsItems && d.termsItems[i]) { d.termsItems[i].text = el.value; markDirty(); }
+    });
+  });
+  root.querySelectorAll("[data-term-del]").forEach(btn => btn.addEventListener("click", () => {
+    d.termsItems.splice(+btn.dataset.termDel, 1);
+    markDirty(); renderEditor();
+  }));
+  root.querySelectorAll("[data-term-up]").forEach(btn => btn.addEventListener("click", () => {
+    const i = +btn.dataset.termUp;
+    if (i > 0) { [d.termsItems[i-1], d.termsItems[i]] = [d.termsItems[i], d.termsItems[i-1]]; markDirty(); renderEditor(); }
+  }));
+  root.querySelectorAll("[data-term-down]").forEach(btn => btn.addEventListener("click", () => {
+    const i = +btn.dataset.termDown;
+    if (i < d.termsItems.length - 1) { [d.termsItems[i+1], d.termsItems[i]] = [d.termsItems[i], d.termsItems[i+1]]; markDirty(); renderEditor(); }
+  }));
+
+  // Display options
+  document.getElementById("doHidePlaceOfSupply")?.addEventListener("change", e => {
+    if (!d.displayOptions) d.displayOptions = {};
+    d.displayOptions.hidePlaceOfSupply = e.target.checked; markDirty();
+  });
+  document.getElementById("doShowSku")?.addEventListener("change", e => {
+    if (!d.displayOptions) d.displayOptions = {};
+    d.displayOptions.showSku = e.target.checked; markDirty(); renderEditor();
+  });
+  document.getElementById("doDescFullWidth")?.addEventListener("change", e => {
+    if (!d.displayOptions) d.displayOptions = {};
+    d.displayOptions.descriptionFullWidth = e.target.checked; markDirty();
+  });
+  document.getElementById("doSummariseTotalQty")?.addEventListener("change", e => {
+    if (!d.displayOptions) d.displayOptions = {};
+    d.displayOptions.summariseTotalQty = e.target.checked; markDirty();
+  });
+  document.getElementById("doShowTotalInWords")?.addEventListener("change", e => {
+    if (!d.displayOptions) d.displayOptions = {};
+    d.displayOptions.showTotalInWords = e.target.checked; markDirty(); renderEditor();
+  });
+
+  // Signature toggle
+  document.getElementById("signatureToggle")?.addEventListener("change", e => {
+    if (!d.signature) d.signature = { enabled:false, label:"Authorized Signatory" };
+    d.signature.enabled = e.target.checked; markDirty(); renderEditor();
+  });
 
   // TDS toggle
   document.getElementById("tdsToggle")?.addEventListener("change", e => {
