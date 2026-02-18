@@ -1095,37 +1095,52 @@ tbody tr:hover { background: var(--primary-soft); }
   margin-bottom: 14px;
 }
 
-/* ── LOGO UPLOAD ──────────────────────────────────────────────── */
-.logo-upload-area {
-  margin-bottom: 16px; padding-bottom: 16px;
-  border-bottom: 1px solid var(--line);
+/* ── LOGO ZONE (Refrens-style, top-right of header) ──────────── */
+.header-with-logo {
+  display: flex; gap: 20px; align-items: flex-start;
 }
-.logo-upload-label {
-  font-size: 0.78rem; font-weight: 600; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.05em;
-  margin-bottom: 8px;
+.header-fields { flex: 1; min-width: 0; }
+
+.logo-zone {
+  flex-shrink: 0;
+  width: 130px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
-.logo-upload-btn {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 8px 16px;
-  border: 1.5px dashed var(--line);
-  border-radius: var(--radius-sm);
-  font-size: 0.83rem; font-weight: 500; color: var(--muted);
-  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+.logo-zone-empty {
+  width: 120px; height: 120px;
+  border: 2px dashed var(--line);
+  border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; cursor: pointer;
+  color: var(--muted); font-size: 0.75rem; font-weight: 500;
+  transition: border-color 0.15s, color 0.15s;
 }
-.logo-upload-btn:hover { border-color: var(--primary); color: var(--primary); }
-.logo-upload-hint {
-  font-size: 0.75rem; color: var(--muted); margin-top: 6px;
+.logo-zone-empty:hover { border-color: var(--primary); color: var(--primary); }
+
+.logo-zone-preview {
+  width: 120px; height: 120px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; padding: 6px;
 }
-.logo-preview-wrap {
-  display: flex; align-items: center; gap: 14px;
-}
-.logo-preview-img {
-  max-height: 64px; max-width: 180px;
+.logo-zone-img {
+  max-width: 100%; max-height: 100%;
   object-fit: contain;
-  border: 1px solid var(--line); border-radius: var(--radius-sm);
-  padding: 6px; background: var(--bg);
 }
+.logo-zone-actions {
+  display: flex; gap: 10px; align-items: center;
+}
+.logo-action-btn {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 0.75rem; color: var(--muted); cursor: pointer;
+  background: none; border: none; padding: 2px 0;
+  transition: color 0.15s;
+}
+.logo-action-btn:hover { color: var(--text); }
+.logo-change-btn { color: var(--primary); }
+.logo-change-btn:hover { opacity: 0.8; }
 
 /* ── NOTES PANELS ──────────────────────────────────────────────── */
 .notes-panels {

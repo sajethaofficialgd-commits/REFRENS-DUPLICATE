@@ -740,32 +740,69 @@ function renderEditor() {
       <div class="section-card">
         <div class="section-head"><h3>1 · Invoice Header</h3></div>
         <div class="section-body">
-          <div class="form-g3">
-            <label>Invoice Number<input class="field" data-path="invoiceNumber" value="${esc(d.invoiceNumber)}" /></label>
-            <label>Invoice Type
-              <select class="field" data-path="invoiceType">
-                ${["Tax Invoice","Bill of Supply","Export Invoice","Proforma Invoice"].map(v=>`<option ${d.invoiceType===v?"selected":""}>${v}</option>`).join("")}
-              </select>
-            </label>
-            <label>Currency
-              <select class="field" data-path="currency">
-                ${["INR","USD","EUR","GBP","AED","SGD","CAD","AUD"].map(c=>`<option ${d.currency===c?"selected":""}>${c}</option>`).join("")}
-              </select>
-            </label>
-            <label>Issue Date<input class="field" type="date" data-path="issueDate" value="${d.issueDate}" /></label>
-            <label>Due Date<input class="field" type="date" data-path="dueDate" value="${d.dueDate}" /></label>
-            <label>PO / Reference<input class="field" data-path="reference" value="${esc(d.reference)}" /></label>
-            <label>Place of Supply
-              <select class="field" data-path="placeOfSupply" id="posSelect">
-                <option value="">Select State</option>${posOpts}
-              </select>
-            </label>
-            <label>Payment Terms
-              <select class="field" id="payTerms" data-path="paymentInfo.terms">
-                ${PAYMENT_TERMS.map(t=>`<option ${d.paymentInfo.terms===t?"selected":""}>${t}</option>`).join("")}
-              </select>
-            </label>
-            ${d.paymentInfo.terms==="Custom"?`<label>Custom Days<input class="field" type="number" min="0" data-path="paymentInfo.customDays" value="${d.paymentInfo.customDays||0}" /></label>`:``}
+          <div class="header-with-logo">
+
+            <!-- Left: form fields -->
+            <div class="header-fields">
+              <div class="form-g3">
+                <label>Invoice Number<input class="field" data-path="invoiceNumber" value="${esc(d.invoiceNumber)}" /></label>
+                <label>Invoice Type
+                  <select class="field" data-path="invoiceType">
+                    ${["Tax Invoice","Bill of Supply","Export Invoice","Proforma Invoice"].map(v=>`<option ${d.invoiceType===v?"selected":""}>${v}</option>`).join("")}
+                  </select>
+                </label>
+                <label>Currency
+                  <select class="field" data-path="currency">
+                    ${["INR","USD","EUR","GBP","AED","SGD","CAD","AUD"].map(c=>`<option ${d.currency===c?"selected":""}>${c}</option>`).join("")}
+                  </select>
+                </label>
+                <label>Issue Date<input class="field" type="date" data-path="issueDate" value="${d.issueDate}" /></label>
+                <label>Due Date<input class="field" type="date" data-path="dueDate" value="${d.dueDate}" /></label>
+                <label>PO / Reference<input class="field" data-path="reference" value="${esc(d.reference)}" /></label>
+                <label>Place of Supply
+                  <select class="field" data-path="placeOfSupply" id="posSelect">
+                    <option value="">Select State</option>${posOpts}
+                  </select>
+                </label>
+                <label>Payment Terms
+                  <select class="field" id="payTerms" data-path="paymentInfo.terms">
+                    ${PAYMENT_TERMS.map(t=>`<option ${d.paymentInfo.terms===t?"selected":""}>${t}</option>`).join("")}
+                  </select>
+                </label>
+                ${d.paymentInfo.terms==="Custom"?`<label>Custom Days<input class="field" type="number" min="0" data-path="paymentInfo.customDays" value="${d.paymentInfo.customDays||0}" /></label>`:``}
+              </div>
+            </div>
+
+            <!-- Right: logo zone -->
+            <div class="logo-zone">
+              ${d.businessDetails?.logo ? `
+                <div class="logo-zone-preview">
+                  <img src="${d.businessDetails.logo}" alt="Logo" class="logo-zone-img" />
+                </div>
+                <div class="logo-zone-actions">
+                  <button class="logo-action-btn" id="removeLogoBtn" type="button">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Remove
+                  </button>
+                  <label class="logo-action-btn logo-change-btn" for="logoFileInput">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    change
+                    <input type="file" id="logoFileInput" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" style="display:none" />
+                  </label>
+                </div>
+              ` : `
+                <label class="logo-zone-empty" for="logoFileInput" title="Upload business logo">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+                    <rect x="3" y="3" width="18" height="18" rx="3"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21,15 16,10 5,21"/>
+                  </svg>
+                  <span>Add Logo</span>
+                  <input type="file" id="logoFileInput" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" style="display:none" />
+                </label>
+              `}
+            </div>
+
           </div>
         </div>
       </div>
@@ -774,28 +811,6 @@ function renderEditor() {
       <div class="section-card">
         <div class="section-head"><h3>2 · Your Business Details</h3></div>
         <div class="section-body">
-
-          <!-- Logo upload -->
-          <div class="logo-upload-area">
-            <div class="logo-upload-label">Business Logo</div>
-            ${d.businessDetails?.logo ? `
-              <div class="logo-preview-wrap">
-                <img class="logo-preview-img" src="${d.businessDetails.logo}" alt="Business Logo" />
-                <button class="icon-btn icon-btn-danger" id="removeLogoBtn" type="button">✕ Remove</button>
-              </div>
-            ` : `
-              <label class="logo-upload-btn" for="logoFileInput">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-                Upload Logo
-                <input type="file" id="logoFileInput" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" style="display:none" />
-              </label>
-              <div class="logo-upload-hint">PNG, JPG, SVG · Max 2 MB · Appears on invoice PDF</div>
-            `}
-          </div>
-
           <div class="form-g3">
             <label>Business Name<input class="field" data-path="businessDetails.businessName" value="${esc(d.businessDetails?.businessName)}" /></label>
             <label>GSTIN<input class="field" data-path="businessDetails.gstin" value="${esc(d.businessDetails?.gstin)}" placeholder="22AAAAA0000A1Z5" style="text-transform:uppercase" /></label>
