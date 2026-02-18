@@ -417,7 +417,7 @@ function bindGlobalEvents() {
     };
     if (!client.name) return showToast("Client name is required.");
     state.clients.push(client);
-    if (state.editorDraft) {
+    if (state.ui.route === "editor" && state.editorDraft) {
       state.editorDraft.clientId = client.id;
       state.editorDraft.clientDetails = deepCopy(client);
       markDirty();
@@ -1246,6 +1246,7 @@ function syncDueDate() {
 function markDirty() {
   state.ui.editorDirty    = true;
   state.editorDraft.updatedAt = new Date().toISOString();
+  if (!state.ui.editorHistory) state.ui.editorHistory = [];
   const h   = state.ui.editorHistory;
   const snap= deepCopy(state.editorDraft);
   if (!h.length || JSON.stringify(h[h.length-1]) !== JSON.stringify(snap)) {
