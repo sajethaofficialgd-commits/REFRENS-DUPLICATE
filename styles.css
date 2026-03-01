@@ -949,12 +949,13 @@ tbody tr:hover { background: var(--primary-soft); }
 .print-sheet {
   width: 794px;
   min-height: 1123px;
-  padding: 36px 40px;
+  padding: 32px 32px 40px;
   font-family: "DM Sans", "Inter", sans-serif;
   color: #1a1d23;
   background: #fff;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 11px;
+  line-height: 1.55;
+  box-sizing: border-box;
 }
 
 /* Template variants */

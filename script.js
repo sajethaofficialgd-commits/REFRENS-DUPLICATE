@@ -1867,161 +1867,226 @@ function buildPreviewHtml(invoice, t) {
 }
 
 function buildPrintHtml(invoice, t) {
-  const cur    = t.currency;
-  const tmpl   = invoice.templateId || "classic";
-  const color  = invoice.templateColor || "#7c3aed";
-  const biz    = invoice.businessDetails || {};
-  const cli    = invoice.clientDetails   || {};
-  const pay    = invoice.paymentInfo     || {};
-  const isIntra= t.isIntraState;
+  const cur      = t.currency;
+  const tmpl     = invoice.templateId    || "classic";
+  const color    = invoice.templateColor || "#7c3aed";
+  const biz      = invoice.businessDetails || {};
+  const cli      = invoice.clientDetails   || {};
+  const pay      = invoice.paymentInfo     || {};
+  const ship     = invoice.shipping        || {};
+  const dispOpts = invoice.displayOptions  || {};
+  const sig      = invoice.signature       || {};
+  const isIntra  = t.isIntraState;
 
-  const headerStyle = (tmpl === "modern" || tmpl === "bold")
-    ? `background:${color};color:#fff;padding:24px 40px 24px;margin:-36px -40px 20px;`
-    : `border-bottom:3px solid ${color};padding-bottom:16px;margin-bottom:20px;`;
+  // ── Template colour helpers ──────────────────────────────────
+  const isDark     = tmpl === "modern" || tmpl === "bold";
+  const isElegant  = tmpl === "elegant";
+  const accentBg   = isDark   ? color : isElegant ? "#fdf8f0" : "#fff";
+  const headerBg   = isDark   ? color : isElegant ? "#fdf8f0" : `linear-gradient(135deg,${color}15,${color}05)`;
+  const headerText = isDark   ? "#fff" : "#111827";
+  const headerMeta = isDark   ? "rgba(255,255,255,0.75)" : "#6b7280";
+  const headerAddr = isDark   ? "rgba(255,255,255,0.82)" : "#6b7280";
+  const thBg       = isDark   ? color  : isElegant ? "#f5ede0" : `${color}15`;
+  const thText     = isDark   ? "#fff" : color;
+  const borderCol  = "#e5e7eb";
 
-  const invTypeColor = (tmpl === "modern" || tmpl === "bold") ? "rgba(255,255,255,0.9)" : color;
-  const metaColor    = (tmpl === "modern" || tmpl === "bold") ? "rgba(255,255,255,0.75)" : "#6b7280";
-  const bizAddrColor = (tmpl === "modern" || tmpl === "bold") ? "rgba(255,255,255,0.8)"  : "#6b7280";
+  // ── Reusable cell style ──────────────────────────────────────
+  const th  = (extra="") => `border:1px solid ${borderCol};padding:7px 10px;background:${thBg};font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:0.04em;color:${thText};${extra}`;
+  const td  = (extra="") => `border:1px solid ${borderCol};padding:7px 10px;font-size:11px;color:#374151;${extra}`;
+  const lbl = `font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;margin-bottom:5px;`;
+
+  // ── Totals row helper ────────────────────────────────────────
+  const trow = (label, value, bold=false, red=false) =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:11px;${bold?"font-weight:700;":""}${red?"color:#dc2626;":"color:#374151;"}">
+      <span>${label}</span><span>${value}</span>
+    </div>`;
+
+  // ── Terms list (new numbered) ────────────────────────────────
+  const termsList = (invoice.termsItems||[]).filter(x=>x.text);
+  const termsHtml = termsList.length
+    ? termsList.map((item,i) =>
+        `<div style="display:flex;gap:8px;margin-bottom:4px;font-size:10px;color:#6b7280;">
+          <span style="font-weight:700;color:#9ca3af;min-width:18px;">${String(i+1).padStart(2,"0")}</span>
+          <span>${esc(item.text)}</span>
+        </div>`).join("")
+    : (invoice.terms ? `<div style="font-size:10px;color:#6b7280;">${esc(invoice.terms)}</div>` : "");
 
   return `
   <div class="print-sheet print-${tmpl}">
 
-    <!-- Header -->
-    <div style="${headerStyle}display:flex;justify-content:space-between;align-items:flex-start;">
-      <div>
-        ${biz.logo ? `<img src="${biz.logo}" style="max-height:64px;max-width:180px;object-fit:contain;display:block;margin-bottom:8px;" alt="Logo" />` : ""}
-        <div style="font-size:14px;font-weight:800;color:${(tmpl==="modern"||tmpl==="bold")?"#fff":color};">${esc(biz.businessName||"Business Name")}</div>
-        <div style="font-size:11px;color:${bizAddrColor};margin-top:4px;max-width:260px;">${esc(biz.address||"")}</div>
-        ${biz.gstin?`<div style="font-size:10px;color:${bizAddrColor};margin-top:2px;">GSTIN: ${esc(biz.gstin)}</div>`:""}
-        ${biz.pan?`<div style="font-size:10px;color:${bizAddrColor};">PAN: ${esc(biz.pan)}</div>`:""}
-        <div style="font-size:10px;color:${bizAddrColor};margin-top:2px;">${esc(biz.phone||"")} ${biz.email?"· "+esc(biz.email):""}</div>
-      </div>
-      <div style="text-align:right;">
-        <div style="font-size:15px;font-weight:700;color:${invTypeColor};margin-bottom:6px;">${esc(invoice.invoiceType||"Tax Invoice")}</div>
-        <div style="font-size:12px;font-weight:600;color:${(tmpl==="modern"||tmpl==="bold")?"#fff":color};">#${esc(invoice.invoiceNumber)}</div>
-        <div style="font-size:11px;color:${metaColor};margin-top:4px;">Date: ${fmtDate(invoice.issueDate)}</div>
-        <div style="font-size:11px;color:${metaColor};">Due: ${fmtDate(invoice.dueDate)}</div>
-        ${invoice.reference?`<div style="font-size:11px;color:${metaColor};">PO: ${esc(invoice.reference)}</div>`:""}
-      </div>
+  <!-- ═══ HEADER ═══ -->
+  <div style="background:${isDark?color:isElegant?"#fdf8f0":"#fff"};${isDark?"color:#fff;":""}padding:24px 32px;margin:-32px -32px 20px;display:flex;justify-content:space-between;align-items:flex-start;${isDark?"":"border-bottom:3px solid "+color+";"}">
+
+    <!-- Left: Business info -->
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:17px;font-weight:800;color:${isDark?"#fff":color};letter-spacing:-0.01em;margin-bottom:5px;">${esc(biz.businessName||"Business Name")}</div>
+      <div style="font-size:10px;color:${headerAddr};white-space:pre-wrap;max-width:260px;line-height:1.6;">${esc(biz.address||"")}</div>
+      ${biz.gstin?`<div style="font-size:10px;color:${headerAddr};margin-top:3px;"><strong style="color:${isDark?"rgba(255,255,255,0.9)":"#374151"};">GSTIN:</strong> ${esc(biz.gstin)}</div>`:""}
+      ${biz.pan?`<div style="font-size:10px;color:${headerAddr};"><strong style="color:${isDark?"rgba(255,255,255,0.9)":"#374151"};">PAN:</strong> ${esc(biz.pan)}</div>`:""}
+      ${(biz.phone||biz.email)?`<div style="font-size:10px;color:${headerAddr};margin-top:3px;">${esc(biz.phone||"")}${biz.phone&&biz.email?" &nbsp;·&nbsp; ":""}${esc(biz.email||"")}</div>`:""}
     </div>
 
-    <!-- Parties -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:11px;">
-        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;margin-bottom:6px;">Billed By</div>
-        <div style="font-weight:700;font-size:12px;margin-bottom:3px;">${esc(biz.businessName||"")}</div>
-        <div style="color:#6b7280;white-space:pre-wrap;">${esc(biz.address||"")}</div>
-        ${biz.gstin?`<div style="margin-top:4px;font-weight:600;">GSTIN: ${esc(biz.gstin)}</div>`:""}
-        ${biz.pan?`<div>PAN: ${esc(biz.pan)}</div>`:""}
-      </div>
-      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:11px;">
-        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;margin-bottom:6px;">Billed To</div>
-        <div style="font-weight:700;font-size:12px;margin-bottom:3px;">${esc(cli.name||"")}</div>
-        <div style="color:#6b7280;white-space:pre-wrap;">${esc(cli.address||"")}</div>
-        ${cli.gstin?`<div style="margin-top:4px;font-weight:600;">GSTIN: ${esc(cli.gstin)}</div>`:""}
-        ${cli.pan?`<div>PAN: ${esc(cli.pan)}</div>`:""}
-        ${invoice.placeOfSupply?`<div style="margin-top:4px;color:#6b7280;">Place of Supply: ${esc(invoice.placeOfSupply)}</div>`:""}
+    <!-- Right: Logo + Invoice type + number + dates -->
+    <div style="text-align:right;flex-shrink:0;margin-left:24px;">
+      ${biz.logo ? `<img src="${biz.logo}" style="max-height:72px;max-width:160px;object-fit:contain;display:block;margin-left:auto;margin-bottom:10px;border-radius:6px;" alt="Logo" />` : ""}
+      <div style="font-size:14px;font-weight:800;color:${isDark?"rgba(255,255,255,0.92)":color};letter-spacing:0.04em;text-transform:uppercase;">${esc(invoice.invoiceType||"Tax Invoice")}</div>
+      <div style="font-size:13px;font-weight:700;color:${isDark?"#fff":"#111827"};margin-top:2px;">#${esc(invoice.invoiceNumber)}</div>
+      <div style="font-size:10px;color:${headerMeta};margin-top:6px;line-height:1.8;">
+        <div>Date: <strong style="color:${isDark?"#fff":"#374151"}">${fmtDate(invoice.issueDate)}</strong></div>
+        <div>Due:&nbsp; <strong style="color:${isDark?"#fff":"#374151"}">${fmtDate(invoice.dueDate)}</strong></div>
+        ${invoice.reference?`<div>PO: <strong style="color:${isDark?"#fff":"#374151"}">${esc(invoice.reference)}</strong></div>`:""}
       </div>
     </div>
+  </div>
 
-    <!-- Line Items -->
-    <table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:11px;">
-      <thead>
-        <tr>
-          <th style="border:1px solid #e5e7eb;padding:7px 9px;background:#f3f4f6;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:#6b7280;">#</th>
-          <th style="border:1px solid #e5e7eb;padding:7px 9px;background:#f3f4f6;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:#6b7280;">Description</th>
-          <th style="border:1px solid #e5e7eb;padding:7px 9px;background:#f3f4f6;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:#6b7280;">HSN/SAC</th>
-          <th style="border:1px solid #e5e7eb;padding:7px 9px;background:#f3f4f6;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:#6b7280;text-align:center;">Qty</th>
-          <th style="border:1px solid #e5e7eb;padding:7px 9px;background:#f3f4f6;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:#6b7280;text-align:right;">Rate</th>
-          <th style="border:1px solid #e5e7eb;padding:7px 9px;background:#f3f4f6;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:#6b7280;text-align:right;">Discount</th>
-          <th style="border:1px solid #e5e7eb;padding:7px 9px;background:#f3f4f6;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:#6b7280;text-align:center;">Tax</th>
-          <th style="border:1px solid #e5e7eb;padding:7px 9px;background:#f3f4f6;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:#6b7280;text-align:right;">Amount</th>
+  <!-- ═══ BILL TO / SHIP TO ═══ -->
+  <div style="display:grid;grid-template-columns:${ship.enabled?"1fr 1fr":"1fr 1fr"};gap:12px;margin-bottom:16px;">
+    <div style="border:1px solid ${borderCol};border-radius:8px;padding:12px;font-size:11px;">
+      <div style="${lbl}">Bill To</div>
+      <div style="font-weight:700;font-size:12px;color:#111827;margin-bottom:4px;">${esc(cli.name||"—")}</div>
+      ${cli.address?`<div style="color:#6b7280;white-space:pre-wrap;font-size:10.5px;line-height:1.5;">${esc(cli.address)}</div>`:""}
+      ${cli.gstin?`<div style="margin-top:5px;font-size:10px;"><strong>GSTIN:</strong> ${esc(cli.gstin)}</div>`:""}
+      ${cli.pan?`<div style="font-size:10px;"><strong>PAN:</strong> ${esc(cli.pan)}</div>`:""}
+      ${(cli.phone||cli.email)?`<div style="font-size:10px;color:#6b7280;margin-top:4px;">${esc(cli.phone||"")}${cli.phone&&cli.email?" · ":""}${esc(cli.email||"")}</div>`:""}
+      ${(!dispOpts.hidePlaceOfSupply && invoice.placeOfSupply)?`<div style="font-size:10px;color:#9ca3af;margin-top:4px;">Place of Supply: ${esc(invoice.placeOfSupply)}</div>`:""}
+    </div>
+    ${ship.enabled ? `
+    <div style="border:1px solid ${borderCol};border-radius:8px;padding:12px;font-size:11px;">
+      <div style="${lbl}">Ship To</div>
+      <div style="font-weight:700;font-size:12px;color:#111827;margin-bottom:4px;">${esc(ship.name||"")}</div>
+      <div style="color:#6b7280;font-size:10.5px;line-height:1.6;">${[ship.address,ship.city,ship.state,ship.pin,ship.country].filter(Boolean).map(esc).join(", ")}</div>
+    </div>
+    ` : `
+    <div style="border:1px solid ${borderCol};border-radius:8px;padding:12px;font-size:11px;">
+      <div style="${lbl}">Billed By</div>
+      <div style="font-weight:700;font-size:12px;color:#111827;margin-bottom:4px;">${esc(biz.businessName||"")}</div>
+      ${biz.address?`<div style="color:#6b7280;white-space:pre-wrap;font-size:10.5px;line-height:1.5;">${esc(biz.address)}</div>`:""}
+      ${biz.gstin?`<div style="font-size:10px;margin-top:5px;"><strong>GSTIN:</strong> ${esc(biz.gstin)}</div>`:""}
+    </div>
+    `}
+  </div>
+
+  <!-- ═══ LINE ITEMS ═══ -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:0;font-size:11px;">
+    <thead>
+      <tr>
+        <th style="${th("width:28px;text-align:center;")}">S#</th>
+        <th style="${th()}">Item / Description</th>
+        <th style="${th("width:72px;text-align:center;")}">HSN/SAC</th>
+        ${dispOpts.showSku ? `<th style="${th("width:72px;text-align:center;")}">SKU</th>` : ""}
+        <th style="${th("width:60px;text-align:center;")}">Qty</th>
+        <th style="${th("width:88px;text-align:right;")}">Rate</th>
+        ${t.totalItemDiscount>0 ? `<th style="${th("width:80px;text-align:right;")}">Disc.</th>` : ""}
+        <th style="${th("width:60px;text-align:center;")}">Tax</th>
+        <th style="${th("width:90px;text-align:right;")}">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${t.rows.map((r,i) => `
+        <tr style="${i%2===1?"background:#f9fafb;":""}">
+          <td style="${td("text-align:center;color:#9ca3af;")}">${i+1}</td>
+          <td style="${td()}">
+            <div style="font-weight:600;color:#111827;">${esc(r.itemName)}</div>
+            ${r.description?`<div style="font-size:9.5px;color:#9ca3af;margin-top:2px;">${esc(r.description)}</div>`:""}
+            ${dispOpts.showSku&&r.sku?`<div style="font-size:9px;color:#9ca3af;">SKU: ${esc(r.sku)}</div>`:""}
+          </td>
+          <td style="${td("text-align:center;color:#6b7280;")}">${esc(r.hsn||"—")}</td>
+          ${dispOpts.showSku ? `<td style="${td("text-align:center;color:#6b7280;")}">${esc(r.sku||"—")}</td>` : ""}
+          <td style="${td("text-align:center;")}">${r.qty}${dispOpts.unitDisplay!=="hide"?" "+esc(r.unit||""):""}</td>
+          <td style="${td("text-align:right;")}">${fmt(r.rate,cur)}</td>
+          ${t.totalItemDiscount>0 ? `<td style="${td("text-align:right;color:#6b7280;")}">${r.itemDisc?fmt(r.itemDisc,cur):"—"}</td>` : ""}
+          <td style="${td("text-align:center;color:#6b7280;")}">${r.taxRate}%</td>
+          <td style="${td("text-align:right;font-weight:600;")}">${fmt(r.lineTotal,cur)}</td>
         </tr>
-      </thead>
-      <tbody>
-        ${t.rows.map((r,i) => `
-          <tr>
-            <td style="border:1px solid #e5e7eb;padding:7px 9px;text-align:center;color:#6b7280;">${i+1}</td>
-            <td style="border:1px solid #e5e7eb;padding:7px 9px;">
-              <strong>${esc(r.itemName)}</strong>
-              ${r.description?`<br><span style="font-size:10px;color:#6b7280;">${esc(r.description)}</span>`:""}
-            </td>
-            <td style="border:1px solid #e5e7eb;padding:7px 9px;text-align:center;color:#6b7280;">${esc(r.hsn||"—")}</td>
-            <td style="border:1px solid #e5e7eb;padding:7px 9px;text-align:center;">${r.qty} ${esc(r.unit||"")}</td>
-            <td style="border:1px solid #e5e7eb;padding:7px 9px;text-align:right;">${fmt(r.rate,cur)}</td>
-            <td style="border:1px solid #e5e7eb;padding:7px 9px;text-align:right;">${r.itemDisc?fmt(r.itemDisc,cur):"—"}</td>
-            <td style="border:1px solid #e5e7eb;padding:7px 9px;text-align:center;">${r.taxRate}%</td>
-            <td style="border:1px solid #e5e7eb;padding:7px 9px;text-align:right;font-weight:600;">${fmt(r.lineTotal,cur)}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
+      `).join("")}
+    </tbody>
+  </table>
 
-    <!-- Footer: Payment + Totals -->
-    <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:20px;margin-top:8px;">
-
-      <!-- Payment / Notes -->
-      <div style="font-size:11px;">
-        ${(pay.showBank && biz.bankName) ? `
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;margin-bottom:6px;">Bank Details</div>
-          <div style="display:flex;gap:4px;margin-bottom:2px;"><span style="color:#9ca3af;min-width:70px;">Bank</span><span>${esc(biz.bankName)}</span></div>
-          <div style="display:flex;gap:4px;margin-bottom:2px;"><span style="color:#9ca3af;min-width:70px;">Account</span><span>${esc(biz.accountNumber||"")}</span></div>
-          <div style="display:flex;gap:4px;margin-bottom:2px;"><span style="color:#9ca3af;min-width:70px;">IFSC</span><span>${esc(biz.ifscCode||"")}</span></div>
-        ` : ""}
-        ${(pay.showUpi && biz.upiId) ? `
-          <div style="display:flex;gap:4px;margin-bottom:2px;margin-top:4px;"><span style="color:#9ca3af;min-width:70px;">UPI</span><span>${esc(biz.upiId)}</span></div>
-        ` : ""}
-        ${invoice.notes ? `
-          <div style="margin-top:10px;">
-            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;margin-bottom:4px;">Notes</div>
-            <div style="color:#6b7280;">${esc(invoice.notes)}</div>
-          </div>
-        ` : ""}
-        ${invoice.terms ? `
-          <div style="margin-top:8px;">
-            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;margin-bottom:4px;">Terms &amp; Conditions</div>
-            <div style="color:#6b7280;">${esc(invoice.terms)}</div>
-          </div>
-        ` : ""}
+  <!-- ═══ TOTALS PANEL ═══ -->
+  <div style="display:flex;justify-content:flex-end;margin-top:0;border:1px solid ${borderCol};border-top:none;">
+    <div style="width:280px;padding:12px 16px;border-left:1px solid ${borderCol};">
+      ${trow("Subtotal", fmt(t.subtotal,cur))}
+      ${t.totalItemDiscount>0 ? trow("Item Discounts", "−"+fmt(t.totalItemDiscount,cur)) : ""}
+      ${t.invDiscAmt>0 ? trow(esc(invoice.invoiceDiscount?.label||"Discount"), "−"+fmt(t.invDiscAmt,cur)) : ""}
+      ${(t.totalItemDiscount>0||t.invDiscAmt>0) ? trow("Taxable Amount", fmt(t.netTaxableBase,cur), true) : ""}
+      ${t.cgstLines.length||t.sgstLines.length||t.igstLines.length ? `<div style="border-top:1px dashed ${borderCol};margin:5px 0;"></div>` : ""}
+      ${t.cgstLines.map(l => trow(`CGST (${l.rate}%)`, fmt(l.amount,cur))).join("")}
+      ${t.sgstLines.map(l => trow(`SGST (${l.rate}%)`, fmt(l.amount,cur))).join("")}
+      ${t.igstLines.map(l => trow(`IGST (${l.rate}%)`, fmt(l.amount,cur))).join("")}
+      ${t.totalCharges>0 ? trow("Additional Charges", fmt(t.totalCharges,cur)) : ""}
+      ${t.roundOffAmt!==0 ? trow("Round Off", (t.roundOffAmt>0?"+":"")+fmt(t.roundOffAmt,cur)) : ""}
+      <div style="border-top:2px solid ${color};margin:7px 0;"></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;color:${color};padding:2px 0;">
+        <span>Grand Total</span><span>${fmt(t.grandTotal,cur)}</span>
       </div>
+      ${t.tdsAmt>0 ? trow(esc(invoice.tds?.label||"TDS"), "−"+fmt(t.tdsAmt,cur)) : ""}
+      ${t.amountPaid>0 ? trow("Amount Paid", "−"+fmt(t.amountPaid,cur)) : ""}
+      ${t.balanceDue>0 ? trow("Balance Due", fmt(t.balanceDue,cur), true, true) : ""}
+    </div>
+  </div>
 
-      <!-- Totals -->
-      <div style="font-size:11px;">
-        ${row("Subtotal", fmt(t.subtotal,cur))}
-        ${t.totalItemDiscount>0 ? row("Item Discounts", "−"+fmt(t.totalItemDiscount,cur)) : ""}
-        ${t.invDiscAmt>0 ? row(esc(invoice.invoiceDiscount?.label||"Discount"), "−"+fmt(t.invDiscAmt,cur)) : ""}
-        ${(t.totalItemDiscount>0||t.invDiscAmt>0) ? row("Taxable Amount", fmt(t.netTaxableBase,cur), true) : ""}
-        ${t.cgstLines.map(l => row(`CGST (${l.rate}%)`, fmt(l.amount,cur))).join("")}
-        ${t.sgstLines.map(l => row(`SGST (${l.rate}%)`, fmt(l.amount,cur))).join("")}
-        ${t.igstLines.map(l => row(`IGST (${l.rate}%)`, fmt(l.amount,cur))).join("")}
-        ${t.totalCharges>0 ? row("Additional Charges", fmt(t.totalCharges,cur)) : ""}
-        ${t.roundOffAmt!==0 ? row("Round Off", (t.roundOffAmt>0?"+":"")+fmt(t.roundOffAmt,cur)) : ""}
-        <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid ${color};font-size:13px;font-weight:700;color:${color};">
-          <span>Grand Total</span><span>${fmt(t.grandTotal,cur)}</span>
+  <!-- ═══ AMOUNT IN WORDS ═══ -->
+  ${dispOpts.showTotalInWords!==false ? `
+  <div style="margin-top:12px;padding:10px 14px;background:${color}0d;border:1px solid ${color}30;border-radius:6px;font-size:10px;">
+    <span style="font-weight:700;color:${color};text-transform:uppercase;letter-spacing:0.04em;">Amount in Words: </span>
+    <span style="color:#374151;font-style:italic;">${amountInWords(t.grandTotal)}</span>
+  </div>` : ""}
+
+  <!-- ═══ BOTTOM: Bank + Notes / Terms / Signature ═══ -->
+  <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin-top:16px;font-size:11px;">
+
+    <!-- Left: Bank + Notes -->
+    <div>
+      ${(pay.showBank && biz.bankName) ? `
+        <div style="${lbl}">Bank Details</div>
+        <div style="border:1px solid ${borderCol};border-radius:6px;padding:10px;font-size:10.5px;color:#374151;line-height:1.8;margin-bottom:10px;">
+          <div><span style="color:#9ca3af;display:inline-block;min-width:72px;">Bank</span>${esc(biz.bankName)}</div>
+          <div><span style="color:#9ca3af;display:inline-block;min-width:72px;">Account</span>${esc(biz.accountNumber||"")}</div>
+          ${biz.ifscCode?`<div><span style="color:#9ca3af;display:inline-block;min-width:72px;">IFSC</span>${esc(biz.ifscCode)}</div>`:""}
+          ${biz.accountHolder?`<div><span style="color:#9ca3af;display:inline-block;min-width:72px;">A/C Holder</span>${esc(biz.accountHolder)}</div>`:""}
+          ${(pay.showUpi && biz.upiId)?`<div><span style="color:#9ca3af;display:inline-block;min-width:72px;">UPI</span>${esc(biz.upiId)}</div>`:""}
         </div>
-        ${t.tdsAmt>0 ? row(esc(invoice.tds?.label||"TDS"), "−"+fmt(t.tdsAmt,cur)) : ""}
-        ${t.amountPaid>0 ? row("Amount Paid", "−"+fmt(t.amountPaid,cur)) : ""}
-        ${t.balanceDue>0 ? `<div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:600;color:#dc2626;"><span>Balance Due</span><span>${fmt(t.balanceDue,cur)}</span></div>` : ""}
-        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #e5e7eb;font-size:10px;color:#6b7280;font-style:italic;">
-          ${amountInWords(t.grandTotal)}
-        </div>
-        <div style="font-size:9px;color:#9ca3af;margin-top:4px;">
-          ${isIntra?"CGST + SGST applied":t.isExport?"Zero-rated (Export)":"IGST applied"} · ${esc(invoice.placeOfSupply||"—")}
-        </div>
-      </div>
+      ` : ((pay.showUpi && biz.upiId) ? `
+        <div style="${lbl}">Payment</div>
+        <div style="font-size:10.5px;margin-bottom:10px;">UPI: <strong>${esc(biz.upiId)}</strong></div>
+      ` : "")}
+
+      ${invoice.notes ? `
+        <div style="${lbl}">Notes</div>
+        <div style="font-size:10.5px;color:#6b7280;line-height:1.6;margin-bottom:10px;">${esc(invoice.notes)}</div>
+      ` : ""}
+
+      ${invoice.additionalInfo ? `
+        <div style="${lbl}">Additional Info</div>
+        <div style="font-size:10.5px;color:#6b7280;line-height:1.6;">${esc(invoice.additionalInfo)}</div>
+      ` : ""}
     </div>
 
-    <!-- Signature row -->
-    <div style="margin-top:28px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;font-size:11px;color:#9ca3af;">
-      <div style="text-align:center;min-width:160px;">
-        <div style="border-bottom:1px solid #d1d5db;padding-bottom:30px;margin-bottom:8px;"></div>
-        Authorised Signatory<br>${esc(biz.businessName||"")}
+    <!-- Right: GST note + Signature -->
+    <div style="display:flex;flex-direction:column;justify-content:space-between;">
+      <div style="font-size:9px;color:#9ca3af;text-align:right;">
+        ${isIntra?"CGST + SGST applied (Intra-state)":t.isExport?"Zero-rated (Export)":"IGST applied (Inter-state)"}
+        ${(!dispOpts.hidePlaceOfSupply && invoice.placeOfSupply) ? ` · ${esc(invoice.placeOfSupply)}` : ""}
+      </div>
+      <div style="text-align:right;margin-top:20px;">
+        <div style="font-size:10px;font-weight:700;color:#374151;margin-bottom:6px;">For ${esc(biz.businessName||"")}</div>
+        <div style="border-bottom:1px solid #d1d5db;width:160px;margin-left:auto;margin-bottom:6px;padding-bottom:28px;"></div>
+        <div style="font-size:10px;color:#9ca3af;">${esc(sig.enabled && sig.label ? sig.label : "Authorized Signatory")}</div>
       </div>
     </div>
+  </div>
 
-    <div style="text-align:center;font-size:9px;color:#9ca3af;margin-top:20px;padding-top:12px;border-top:1px solid #f3f4f6;">
-      This is a computer-generated invoice and does not require a physical signature.
-    </div>
+  <!-- ═══ TERMS & CONDITIONS ═══ -->
+  ${termsHtml ? `
+  <div style="margin-top:16px;border-top:1px solid ${borderCol};padding-top:12px;">
+    <div style="${lbl}">Terms &amp; Conditions</div>
+    ${termsHtml}
+  </div>` : ""}
+
+  <!-- ═══ FOOTER ═══ -->
+  <div style="margin-top:20px;padding-top:10px;border-top:1px solid #f3f4f6;text-align:center;font-size:8.5px;color:#9ca3af;">
+    This is a computer-generated invoice and does not require a physical signature.
+  </div>
 
   </div>
   `;
