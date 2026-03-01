@@ -2082,16 +2082,17 @@ function undoChange() {
 
 function saveDraft() {
   if (!state.editorDraft) return;
-  const inv = deepCopy(state.editorDraft);
-  inv.status = "Draft";
-  ensureTimeline(inv, "Created");
-  logActivity(inv, "Draft saved.");
-  upsertInvoice(inv);
-  state.editorDraft       = inv;
-  state.ui.editorDirty    = false;
-  state.ui.autosaveLabel  = `Saved ${new Date().toLocaleTimeString()}`;
+  // Save a snapshot to the invoices list — do NOT replace state.editorDraft
+  // reference, otherwise the cached `d` in bindEditorEvents goes stale and
+  // subsequent typing/logo uploads modify the old object instead of the live one.
+  state.editorDraft.status = state.editorDraft.status || "Draft";
+  const snap = deepCopy(state.editorDraft);
+  ensureTimeline(snap, "Created");
+  logActivity(snap, "Draft saved.");
+  upsertInvoice(snap);
+  state.ui.editorDirty   = false;
+  state.ui.autosaveLabel = `Saved ${new Date().toLocaleTimeString()}`;
   saveState(); showToast("Draft saved.");
-  // Update label without full re-render to preserve focus
   const lbl = document.querySelector(".autosave-bar span");
   if (lbl) lbl.textContent = state.ui.autosaveLabel;
   else renderEditor();
@@ -2121,15 +2122,14 @@ function startAutosave() {
   if (autosaveTimer) return;
   autosaveTimer = setInterval(() => {
     if (state.ui.route !== "editor" || !state.editorDraft || !state.ui.editorDirty) return;
-    const inv = deepCopy(state.editorDraft);
-    inv.status = inv.status || "Draft";
-    logActivity(inv, "Autosaved.");
-    upsertInvoice(inv);
-    state.editorDraft      = inv;
+    // Save snapshot without replacing state.editorDraft reference
+    const snap = deepCopy(state.editorDraft);
+    snap.status = snap.status || "Draft";
+    logActivity(snap, "Autosaved.");
+    upsertInvoice(snap);
     state.ui.editorDirty   = false;
     state.ui.autosaveLabel = `Autosaved ${new Date().toLocaleTimeString()}`;
     saveState();
-    // Update label in DOM without re-rendering (preserves focus/cursor)
     const lbl = document.querySelector(".autosave-bar span");
     if (lbl) lbl.textContent = state.ui.autosaveLabel;
   }, AUTOSAVE_MS);
