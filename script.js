@@ -1689,36 +1689,47 @@ function bindEditorEvents() {
   const root = document.getElementById("screenRoot");
   const d    = state.editorDraft;
 
-  // Generic path-bound fields
+  // Fields that need a full re-render when changed (affect structure/calculations)
+  const RERENDER_PATHS = new Set([
+    "invoiceType","currency","paymentInfo.terms","paymentInfo.customDays",
+    "issueDate","businessDetails.state","placeOfSupply",
+    "invoiceDiscount.type","tds.type","recurring.interval",
+    "displayOptions.unitDisplay","displayOptions.taxSummary",
+  ]);
+
+  // Generic path-bound fields — only re-render when structurally needed
   root.querySelectorAll("[data-path]").forEach(el => {
     el.addEventListener("input", () => {
       setPath(d, el.dataset.path, parseVal(el));
       if (["issueDate","paymentInfo.terms","paymentInfo.customDays"].includes(el.dataset.path)) syncDueDate();
-      markDirty(); renderEditor();
+      markDirty();
+      if (RERENDER_PATHS.has(el.dataset.path)) renderEditor();
     });
   });
 
-  // Line items
+  // Line items — only re-render for numeric/calculated fields; text fields just save
+  const LI_CALC_FIELDS = new Set(["quantity","unitPrice","discount","taxPercent","unit"]);
   root.querySelectorAll("[data-item][data-field]").forEach(el => {
     el.addEventListener("input", () => {
       const i    = +el.dataset.item;
       const field= el.dataset.field;
       const row  = d.lineItems[i]; if (!row) return;
       if (field === "taxPercent" && el.tagName === "SELECT" && el.value === "custom") return;
-      const numFields = ["quantity","unitPrice","discount","taxPercent"];
-      row[field] = numFields.includes(field) ? +el.value || 0 : el.value;
-      markDirty(); renderEditor();
+      row[field] = LI_CALC_FIELDS.has(field) ? +el.value || 0 : el.value;
+      markDirty();
+      if (LI_CALC_FIELDS.has(field) || el.tagName === "SELECT") renderEditor();
     });
   });
 
-  // Charge fields
+  // Charge fields — only re-render for amount/taxable (not label text)
   root.querySelectorAll("[data-charge][data-cf]").forEach(el => {
     el.addEventListener(el.type==="checkbox"?"change":"input", () => {
       const i  = +el.dataset.charge;
       const cf = el.dataset.cf;
       const ch = d.charges[i]; if (!ch) return;
       ch[cf] = el.type==="checkbox" ? el.checked : (cf==="amount" ? +el.value||0 : el.value);
-      markDirty(); renderEditor();
+      markDirty();
+      if (cf !== "label") renderEditor();
     });
   });
 
