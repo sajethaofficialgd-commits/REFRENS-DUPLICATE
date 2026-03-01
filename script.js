@@ -121,6 +121,12 @@ function createInitialState() {
       editorDirty: false,
       autosaveLabel: "",
       editorHistory: [],
+      dashPage: 1,
+      dashPerPage: 10,
+      dashFiltersOpen: true,
+      dashSummaryOpen: false,
+      dashGraphOpen: false,
+      dashSort: { col: "date", dir: "desc" },
     },
   };
 }
@@ -441,13 +447,40 @@ function bindGlobalEvents() {
 
 // ── DASHBOARD ─────────────────────────────────────────────────
 function renderDashboard() {
-  const root     = document.getElementById("screenRoot");
-  const org      = getCurrentOrg();
-  const invoices = applyFilters(getOrgInvoices());
-  const clients  = getOrgClients();
-  const cur      = org.currency;
+  const root    = document.getElementById("screenRoot");
+  const org     = getCurrentOrg();
+  const allInv  = applyFilters(getOrgInvoices());
+  const clients = getOrgClients();
+  const cur     = org.currency;
+  const ui      = state.ui;
 
-  const metrics = invoices.reduce((acc, inv) => {
+  // ensure new state fields exist on old saved states
+  if (!ui.dashPage)    ui.dashPage    = 1;
+  if (!ui.dashPerPage) ui.dashPerPage = 10;
+  if (ui.dashFiltersOpen === undefined) ui.dashFiltersOpen = true;
+  if (ui.dashSummaryOpen === undefined) ui.dashSummaryOpen = false;
+  if (ui.dashGraphOpen   === undefined) ui.dashGraphOpen   = false;
+  if (!ui.dashSort) ui.dashSort = { col:"date", dir:"desc" };
+
+  // ── Sort ──────────────────────────────────────────────────
+  const sortedInv = [...allInv].sort((a, b) => {
+    const dir = ui.dashSort.dir === "asc" ? 1 : -1;
+    if (ui.dashSort.col === "date")    return dir * (new Date(a.issueDate) - new Date(b.issueDate));
+    if (ui.dashSort.col === "invoice") return dir * a.invoiceNumber.localeCompare(b.invoiceNumber);
+    if (ui.dashSort.col === "amount")  return dir * (calculateTotals(a).grandTotal - calculateTotals(b).grandTotal);
+    if (ui.dashSort.col === "due")     return dir * (new Date(a.dueDate) - new Date(b.dueDate));
+    return 0;
+  });
+
+  // ── Pagination ────────────────────────────────────────────
+  const total      = sortedInv.length;
+  const totalPages = Math.max(1, Math.ceil(total / ui.dashPerPage));
+  if (ui.dashPage > totalPages) ui.dashPage = totalPages;
+  const start   = (ui.dashPage - 1) * ui.dashPerPage;
+  const pageInv = sortedInv.slice(start, start + ui.dashPerPage);
+
+  // ── Metrics (from ALL invoices, not paginated) ────────────
+  const metrics = allInv.reduce((acc, inv) => {
     if (inv.deleted) return acc;
     const t = calculateTotals(inv);
     const s = resolveStatus(inv);
@@ -459,152 +492,402 @@ function renderDashboard() {
     return acc;
   }, { count:0, total:0, balance:0, overdue:0, paid:0, paidAmt:0 });
 
+  // ── Active filter chips ───────────────────────────────────
+  const f = ui.filters;
+  const chips = [];
+  if (f.status !== "all") chips.push({ label: f.status, key:"status" });
+  if (f.client !== "all") { const c = clients.find(x=>x.id===f.client); chips.push({ label: c?.name||"Client", key:"client" }); }
+  if (f.startDate) chips.push({ label: "From: "+f.startDate, key:"startDate" });
+  if (f.endDate)   chips.push({ label: "To: "+f.endDate,     key:"endDate" });
+  if (f.minAmt)    chips.push({ label: "Min: "+f.minAmt,     key:"minAmt" });
+  if (f.maxAmt)    chips.push({ label: "Max: "+f.maxAmt,     key:"maxAmt" });
+
+  // ── Sort arrow helper ─────────────────────────────────────
+  const sortArrow = col => ui.dashSort.col === col ? (ui.dashSort.dir==="asc"?" ↑":" ↓") : "";
+
+  // ── Page buttons ──────────────────────────────────────────
+  const pageButtons = () => {
+    let btns = "";
+    const maxBtns = 5;
+    let s2 = Math.max(1, ui.dashPage - 2);
+    let e2 = Math.min(totalPages, s2 + maxBtns - 1);
+    if (e2 - s2 < maxBtns - 1) s2 = Math.max(1, e2 - maxBtns + 1);
+    for (let p = s2; p <= e2; p++) {
+      btns += `<button class="page-btn ${p===ui.dashPage?"active":""}" data-page="${p}">${p}</button>`;
+    }
+    return btns;
+  };
+
   root.innerHTML = `
+    <!-- ── TOP BAR ── -->
     <div class="dash-header">
-      <div class="dash-title">Dashboard</div>
-      <button class="primary-btn" id="dashCreateBtn" type="button">+ New Invoice</button>
-    </div>
-
-    <div class="metric-grid">
-      <div class="metric-card metric-primary">
-        <div class="metric-label">Total Invoices</div>
-        <div class="metric-value">${metrics.count}</div>
-        <div class="metric-sub">${state.ui.dashboardTab} view</div>
-      </div>
-      <div class="metric-card metric-primary">
-        <div class="metric-label">Total Billed</div>
-        <div class="metric-value">${fmt(metrics.total, cur)}</div>
-        <div class="metric-sub">across all invoices</div>
-      </div>
-      <div class="metric-card metric-warning">
-        <div class="metric-label">Balance Due</div>
-        <div class="metric-value">${fmt(metrics.balance, cur)}</div>
-        <div class="metric-sub">${metrics.overdue} overdue</div>
-      </div>
-      <div class="metric-card metric-success">
-        <div class="metric-label">Paid</div>
-        <div class="metric-value">${fmt(metrics.paidAmt, cur)}</div>
-        <div class="metric-sub">${metrics.paid} invoices</div>
+      <div class="dash-title">Invoices</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div class="tab-bar" style="margin:0;">
+          ${["active","recurring","deleted"].map(t => `<button class="tab-pill ${ui.dashboardTab===t?"active":""}" data-tab="${t}" type="button">${t.charAt(0).toUpperCase()+t.slice(1)}</button>`).join("")}
+        </div>
+        <button class="primary-btn" id="dashCreateBtn" type="button">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Invoice
+        </button>
       </div>
     </div>
 
-    <div class="card">
-      <div class="dash-toolbar">
-        <div class="filter-row">
-          <label>Status
-            <select id="fStatus">
+    <!-- ── FILTERS CARD ── -->
+    <div class="card dash-filters-card">
+      <div class="dash-filters-head" id="toggleFilters">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          <strong style="font-size:0.88rem;">Filters</strong>
+          ${chips.length ? `<button class="clear-filters-link" id="clearFiltersBtn">× Clear All Filters</button>` : ""}
+        </div>
+        <svg class="collapse-arrow ${ui.dashFiltersOpen?"open":""}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+
+      ${ui.dashFiltersOpen ? `
+      <div class="dash-filters-body">
+        <div class="filters-grid">
+          <label class="filter-field-label">Select Invoice Status
+            <select class="field" id="fStatus">
               <option value="all">All</option>
-              ${["Draft","Sent","Viewed","Paid","Overdue"].map(s => `<option value="${s}" ${state.ui.filters.status===s?"selected":""}>${s}</option>`).join("")}
+              ${["Draft","Sent","Viewed","Paid","Overdue"].map(s => `<option value="${s}" ${f.status===s?"selected":""}>${s}</option>`).join("")}
             </select>
           </label>
-          <label>Client
-            <select id="fClient">
+          <label class="filter-field-label">Search Client
+            <select class="field" id="fClient">
               <option value="all">All Clients</option>
-              ${clients.map(c => `<option value="${c.id}" ${state.ui.filters.client===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}
+              ${clients.map(c => `<option value="${c.id}" ${f.client===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}
             </select>
           </label>
-          <label>From Date<input id="fStart" type="date" value="${state.ui.filters.startDate}" /></label>
-          <label>To Date<input id="fEnd" type="date" value="${state.ui.filters.endDate}" /></label>
-          <label>Min Amt<input id="fMin" type="number" min="0" value="${state.ui.filters.minAmt}" /></label>
-          <label>Max Amt<input id="fMax" type="number" min="0" value="${state.ui.filters.maxAmt}" /></label>
+          <label class="filter-field-label">Select Date Range
+            <div class="date-range-wrap">
+              <input class="field" id="fStart" type="date" value="${f.startDate}" placeholder="Start date" />
+              <span style="color:var(--muted);font-size:0.78rem;">—</span>
+              <input class="field" id="fEnd" type="date" value="${f.endDate}" placeholder="End date" />
+            </div>
+          </label>
+          <label class="filter-field-label">Amount Range
+            <div class="date-range-wrap">
+              <input class="field" id="fMin" type="number" min="0" value="${f.minAmt}" placeholder="Min" />
+              <span style="color:var(--muted);font-size:0.78rem;">—</span>
+              <input class="field" id="fMax" type="number" min="0" value="${f.maxAmt}" placeholder="Max" />
+            </div>
+          </label>
         </div>
-        <div style="display:flex;gap:6px;">
-          <button class="secondary-btn" id="applyFiltersBtn">Apply</button>
-          <button class="ghost-btn" id="clearFiltersBtn">Clear</button>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+          <button class="primary-btn" id="applyFiltersBtn" style="padding:6px 16px;">Apply Filters</button>
+          <button class="ghost-btn" id="clearFiltersBtn2">Clear</button>
+          ${chips.length ? `<div class="active-chips">${chips.map(ch=>`<span class="filter-chip">${esc(ch.label)} <span class="chip-x" data-clear="${ch.key}">×</span></span>`).join("")}</div>` : `<span style="font-size:0.78rem;color:var(--muted);">Applied Filters: None</span>`}
         </div>
       </div>
+      ` : ""}
+    </div>
 
-      <div class="tab-bar">
-        ${["active","recurring","deleted"].map(t => `<button class="tab-pill ${state.ui.dashboardTab===t?"active":""}" data-tab="${t}" type="button">${t.charAt(0).toUpperCase()+t.slice(1)}</button>`).join("")}
+    <!-- ── INVOICE SUMMARY (collapsible) ── -->
+    <div class="card dash-collapse-card">
+      <div class="dash-collapse-head" id="toggleSummary">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg class="collapse-arrow ${ui.dashSummaryOpen?"open":""}" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <strong style="font-size:0.88rem;">Invoice Summary</strong>
+        </div>
       </div>
+      ${ui.dashSummaryOpen ? `
+      <div class="metric-grid" style="padding:16px;border-top:1px solid var(--line);">
+        <div class="metric-card metric-primary">
+          <div class="metric-label">Total Invoices</div>
+          <div class="metric-value">${metrics.count}</div>
+          <div class="metric-sub">${ui.dashboardTab} view</div>
+        </div>
+        <div class="metric-card metric-primary">
+          <div class="metric-label">Total Billed</div>
+          <div class="metric-value">${fmt(metrics.total, cur)}</div>
+          <div class="metric-sub">across all invoices</div>
+        </div>
+        <div class="metric-card metric-warning">
+          <div class="metric-label">Balance Due</div>
+          <div class="metric-value">${fmt(metrics.balance, cur)}</div>
+          <div class="metric-sub">${metrics.overdue} overdue</div>
+        </div>
+        <div class="metric-card metric-success">
+          <div class="metric-label">Collected</div>
+          <div class="metric-value">${fmt(metrics.paidAmt, cur)}</div>
+          <div class="metric-sub">${metrics.paid} paid invoices</div>
+        </div>
+      </div>
+      ` : ""}
+    </div>
 
-      ${state.ui.selectedIds.length ? `
-        <div class="bulk-bar">
-          <strong style="font-size:0.84rem;color:var(--primary);">${state.ui.selectedIds.length} selected</strong>
-          <div class="bulk-actions">
-            <button class="secondary-btn" data-bulk="send">Send</button>
-            <button class="secondary-btn" data-bulk="download">Download PDF</button>
-            <button class="secondary-btn" data-bulk="paid">Mark Paid</button>
-            <button class="danger-btn" data-bulk="delete">Delete</button>
+    <!-- ── INVOICE GRAPH (collapsible) ── -->
+    <div class="card dash-collapse-card">
+      <div class="dash-collapse-head" id="toggleGraph">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg class="collapse-arrow ${ui.dashGraphOpen?"open":""}" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <strong style="font-size:0.88rem;">Invoice Graph</strong>
+        </div>
+      </div>
+      ${ui.dashGraphOpen ? `
+      <div style="padding:20px;border-top:1px solid var(--line);">
+        ${renderMiniGraph(allInv, cur)}
+      </div>
+      ` : ""}
+    </div>
+
+    <!-- ── MAIN TABLE CARD ── -->
+    <div class="card" style="padding:0;overflow:hidden;">
+
+      <!-- Table toolbar -->
+      <div class="table-toolbar">
+        <div style="font-size:0.82rem;color:var(--muted);">
+          Showing <strong>${start+1}</strong> to <strong>${Math.min(start+ui.dashPerPage, total)}</strong> of <strong>${total}</strong> Invoice${total!==1?"s":""}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${state.ui.selectedIds.length ? `
+            <div class="bulk-bar" style="margin:0;padding:0;border:none;background:none;">
+              <strong style="font-size:0.82rem;color:var(--primary);">${state.ui.selectedIds.length} selected</strong>
+              <button class="secondary-btn" data-bulk="send">Send</button>
+              <button class="secondary-btn" data-bulk="download">PDF</button>
+              <button class="secondary-btn" data-bulk="paid">Mark Paid</button>
+              <button class="danger-btn" data-bulk="delete">Delete</button>
+            </div>
+          ` : ""}
+          <div style="display:flex;align-items:center;gap:4px;">
+            <span style="font-size:0.78rem;color:var(--muted);">Per page:</span>
+            <select class="field" id="perPageSel" style="padding:3px 6px;width:auto;font-size:0.78rem;">
+              ${[10,25,50].map(n=>`<option value="${n}" ${ui.dashPerPage===n?"selected":""}>${n}</option>`).join("")}
+            </select>
           </div>
         </div>
-      ` : ""}
+      </div>
 
-      <div class="table-wrap">
-        <table>
+      <!-- Table -->
+      <div class="table-wrap" style="margin:0;">
+        <table class="dash-table">
           <thead>
             <tr>
-              <th><input type="checkbox" id="selectAll" ${invoices.length && state.ui.selectedIds.length===invoices.length?"checked":""}></th>
-              <th>Invoice #</th><th>Client</th><th>Issue Date</th><th>Due Date</th>
-              <th>Amount</th><th>Status</th><th>Actions</th>
+              <th style="width:36px;"><input type="checkbox" id="selectAll" ${pageInv.length && state.ui.selectedIds.length===allInv.length?"checked":""}></th>
+              <th style="width:36px;color:var(--muted);">#</th>
+              <th class="sortable-th" data-sort="date">Date${sortArrow("date")}</th>
+              <th class="sortable-th" data-sort="invoice">Invoice #${sortArrow("invoice")}</th>
+              <th>Billed To</th>
+              <th class="sortable-th" data-sort="amount" style="text-align:right;">Amount${sortArrow("amount")}</th>
+              <th>Status</th>
+              <th class="sortable-th" data-sort="due">Due Date${sortArrow("due")}</th>
+              <th style="text-align:right;">Actions</th>
             </tr>
           </thead>
           <tbody>
-            ${invoices.length ? invoices.map(inv => {
-              const s = resolveStatus(inv);
-              const t = calculateTotals(inv);
-              return `<tr>
+            ${pageInv.length ? pageInv.map((inv, idx) => {
+              const s  = resolveStatus(inv);
+              const tt = calculateTotals(inv);
+              const rowNum = start + idx + 1;
+              return `<tr class="dash-row">
                 <td><input type="checkbox" data-sel="${inv.id}" ${state.ui.selectedIds.includes(inv.id)?"checked":""}></td>
-                <td><strong>${esc(inv.invoiceNumber)}</strong></td>
-                <td>${esc(inv.clientDetails?.name || "—")}</td>
-                <td>${fmtDate(inv.issueDate)}</td>
-                <td>${fmtDate(inv.dueDate)}</td>
-                <td><strong>${fmt(t.grandTotal, inv.currency)}</strong></td>
-                <td><span class="status-badge status-${s.toLowerCase()}">${s}</span></td>
+                <td style="color:var(--muted);font-size:0.78rem;">${rowNum}</td>
+                <td style="color:var(--muted);font-size:0.82rem;">${fmtDate(inv.issueDate)}</td>
+                <td><strong style="font-size:0.85rem;">${esc(inv.invoiceNumber)}</strong>
+                  ${inv.invoiceType&&inv.invoiceType!=="Tax Invoice"?`<div style="font-size:0.72rem;color:var(--muted);">${esc(inv.invoiceType)}</div>`:""}
+                </td>
                 <td>
-                  <div class="td-actions">
-                    <button data-action="view"     data-id="${inv.id}">View</button>
-                    <button data-action="edit"     data-id="${inv.id}">Edit</button>
-                    <button data-action="duplicate"data-id="${inv.id}">Duplicate</button>
-                    <button data-action="download" data-id="${inv.id}">PDF</button>
-                    <button data-action="send"     data-id="${inv.id}">Send</button>
-                    <button data-action="delete"   data-id="${inv.id}">Delete</button>
+                  <div style="font-weight:500;font-size:0.85rem;">${esc(inv.clientDetails?.name||"—")}</div>
+                  ${inv.clientDetails?.gstin?`<div style="font-size:0.72rem;color:var(--muted);">${esc(inv.clientDetails.gstin)}</div>`:""}
+                </td>
+                <td style="text-align:right;font-weight:600;font-size:0.88rem;">${fmt(tt.grandTotal, inv.currency)}</td>
+                <td><span class="status-badge status-${s.toLowerCase()}">${s}</span>
+                  ${tt.balanceDue>0&&s!=="Paid"?`<div style="font-size:0.72rem;color:var(--danger);">Due ${fmtDate(inv.dueDate)}</div>`:""}
+                </td>
+                <td style="font-size:0.82rem;color:var(--muted);">${fmtDate(inv.dueDate)}</td>
+                <td>
+                  <div class="row-actions">
+                    <button class="row-act-btn" data-action="view"      data-id="${inv.id}" title="Open">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Open
+                    </button>
+                    <button class="row-act-btn" data-action="edit"      data-id="${inv.id}" title="Edit">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      Edit
+                    </button>
+                    <button class="row-act-btn row-act-paid" data-action="paid" data-id="${inv.id}" title="Mark Paid">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                      Mark Paid
+                    </button>
+                    <button class="row-act-btn" data-action="duplicate" data-id="${inv.id}" title="Duplicate">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      Duplicate
+                    </button>
+                    <button class="row-act-btn row-act-danger" data-action="delete" data-id="${inv.id}" title="Delete">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                    </button>
                   </div>
                 </td>
               </tr>`;
-            }).join("") : `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px;">No invoices found.</td></tr>`}
+            }).join("") : `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:48px 0;">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3" style="display:block;margin:0 auto 12px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+              No invoices found. <a href="#" id="emptyCreateLink" style="color:var(--primary);">Create your first invoice →</a>
+            </td></tr>`}
           </tbody>
         </table>
       </div>
+
+      <!-- Pagination -->
+      ${totalPages > 1 ? `
+      <div class="pagination-bar">
+        <button class="page-btn" data-page="${ui.dashPage-1}" ${ui.dashPage<=1?"disabled":""}>‹</button>
+        ${pageButtons()}
+        <button class="page-btn" data-page="${ui.dashPage+1}" ${ui.dashPage>=totalPages?"disabled":""}>›</button>
+      </div>` : ""}
+
     </div>
   `;
 
+  // ── Bind events ────────────────────────────────────────────
   document.getElementById("dashCreateBtn").addEventListener("click", () => openEditor());
-  document.getElementById("applyFiltersBtn").addEventListener("click", () => {
-    state.ui.filters.status   = document.getElementById("fStatus").value;
-    state.ui.filters.client   = document.getElementById("fClient").value;
-    state.ui.filters.startDate= document.getElementById("fStart").value;
-    state.ui.filters.endDate  = document.getElementById("fEnd").value;
-    state.ui.filters.minAmt   = document.getElementById("fMin").value;
-    state.ui.filters.maxAmt   = document.getElementById("fMax").value;
-    saveState(); renderDashboard();
-  });
-  document.getElementById("clearFiltersBtn").addEventListener("click", () => {
-    state.ui.filters = { status:"all", client:"all", startDate:"", endDate:"", minAmt:"", maxAmt:"", search:"" };
-    saveState(); renderDashboard();
-  });
+  document.getElementById("emptyCreateLink")?.addEventListener("click", e => { e.preventDefault(); openEditor(); });
 
+  // Collapsibles
+  document.getElementById("toggleFilters").addEventListener("click",  () => { ui.dashFiltersOpen  = !ui.dashFiltersOpen;  saveState(); renderDashboard(); });
+  document.getElementById("toggleSummary").addEventListener("click",  () => { ui.dashSummaryOpen  = !ui.dashSummaryOpen;  saveState(); renderDashboard(); });
+  document.getElementById("toggleGraph").addEventListener("click",    () => { ui.dashGraphOpen    = !ui.dashGraphOpen;    saveState(); renderDashboard(); });
+
+  // Filters apply / clear
+  document.getElementById("applyFiltersBtn")?.addEventListener("click", () => {
+    f.status    = document.getElementById("fStatus").value;
+    f.client    = document.getElementById("fClient").value;
+    f.startDate = document.getElementById("fStart").value;
+    f.endDate   = document.getElementById("fEnd").value;
+    f.minAmt    = document.getElementById("fMin").value;
+    f.maxAmt    = document.getElementById("fMax").value;
+    ui.dashPage = 1;
+    saveState(); renderDashboard();
+  });
+  const clearAll = () => {
+    state.ui.filters = { status:"all", client:"all", startDate:"", endDate:"", minAmt:"", maxAmt:"", search:"" };
+    ui.dashPage = 1; saveState(); renderDashboard();
+  };
+  document.getElementById("clearFiltersBtn")?.addEventListener("click", clearAll);
+  document.getElementById("clearFiltersBtn2")?.addEventListener("click", clearAll);
+  document.querySelectorAll(".chip-x").forEach(el => el.addEventListener("click", e => {
+    e.stopPropagation();
+    const key = el.dataset.clear;
+    if (key === "status") f.status = "all";
+    else if (key === "client") f.client = "all";
+    else f[key] = "";
+    ui.dashPage = 1; saveState(); renderDashboard();
+  }));
+
+  // Tab pills
   document.querySelectorAll(".tab-pill").forEach(btn => btn.addEventListener("click", () => {
-    state.ui.dashboardTab = btn.dataset.tab;
-    state.ui.selectedIds  = [];
+    ui.dashboardTab = btn.dataset.tab;
+    ui.selectedIds  = [];
+    ui.dashPage     = 1;
     saveState(); renderDashboard();
   }));
 
+  // Sort columns
+  document.querySelectorAll(".sortable-th").forEach(th => th.addEventListener("click", () => {
+    const col = th.dataset.sort;
+    if (ui.dashSort.col === col) ui.dashSort.dir = ui.dashSort.dir === "asc" ? "desc" : "asc";
+    else { ui.dashSort.col = col; ui.dashSort.dir = "desc"; }
+    ui.dashPage = 1; saveState(); renderDashboard();
+  }));
+
+  // Per-page selector
+  document.getElementById("perPageSel")?.addEventListener("change", e => {
+    ui.dashPerPage = +e.target.value;
+    ui.dashPage    = 1;
+    saveState(); renderDashboard();
+  });
+
+  // Pagination buttons
+  document.querySelectorAll(".page-btn").forEach(btn => btn.addEventListener("click", () => {
+    const p = +btn.dataset.page;
+    if (p >= 1 && p <= totalPages) { ui.dashPage = p; saveState(); renderDashboard(); }
+  }));
+
+  // Select all (page only)
   const selAll = document.getElementById("selectAll");
   if (selAll) selAll.addEventListener("change", () => {
-    state.ui.selectedIds = selAll.checked ? invoices.map(i => i.id) : [];
+    if (selAll.checked) pageInv.forEach(i => { if (!ui.selectedIds.includes(i.id)) ui.selectedIds.push(i.id); });
+    else pageInv.forEach(i => { ui.selectedIds = ui.selectedIds.filter(x => x !== i.id); });
     saveState(); renderDashboard();
   });
 
+  // Row checkboxes
   document.querySelectorAll("input[data-sel]").forEach(cb => cb.addEventListener("change", () => {
     const id = cb.dataset.sel;
-    if (cb.checked && !state.ui.selectedIds.includes(id)) state.ui.selectedIds.push(id);
-    if (!cb.checked) state.ui.selectedIds = state.ui.selectedIds.filter(x => x !== id);
+    if (cb.checked && !ui.selectedIds.includes(id)) ui.selectedIds.push(id);
+    if (!cb.checked) ui.selectedIds = ui.selectedIds.filter(x => x !== id);
     saveState(); renderDashboard();
   }));
 
-  document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", () => handleAction(btn.dataset.action, btn.dataset.id)));
+  // Row actions (paid is special)
+  document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", () => {
+    if (btn.dataset.action === "paid") { markPaid(btn.dataset.id); saveState(); showToast("Marked as paid."); renderDashboard(); }
+    else handleAction(btn.dataset.action, btn.dataset.id);
+  }));
+
+  // Bulk actions
   document.querySelectorAll("[data-bulk]").forEach(btn => btn.addEventListener("click", () => handleBulk(btn.dataset.bulk)));
+}
+
+// ── MINI GRAPH ────────────────────────────────────────────────
+function renderMiniGraph(invoices, cur) {
+  if (!invoices.length) return `<div style="text-align:center;color:var(--muted);padding:20px;">No data to chart.</div>`;
+
+  // Group by month (last 6)
+  const months = {};
+  const now    = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d   = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    const lbl = d.toLocaleString("default", { month:"short", year:"2-digit" });
+    months[key] = { label: lbl, total: 0, paid: 0 };
+  }
+  invoices.forEach(inv => {
+    if (inv.deleted) return;
+    const key = inv.issueDate?.slice(0,7);
+    if (months[key]) {
+      const t = calculateTotals(inv);
+      months[key].total += t.grandTotal;
+      if (resolveStatus(inv) === "Paid") months[key].paid += t.grandTotal;
+    }
+  });
+
+  const vals = Object.values(months);
+  const maxVal = Math.max(...vals.map(v => v.total), 1);
+  const barW = 44;
+  const gap  = 14;
+  const h    = 100;
+  const svgW = vals.length * (barW + gap) + gap;
+
+  const bars = vals.map((v, i) => {
+    const x    = gap + i * (barW + gap);
+    const bh   = Math.round((v.total / maxVal) * h);
+    const bh2  = Math.round((v.paid  / maxVal) * h);
+    const y    = h - bh;
+    const y2   = h - bh2;
+    return `
+      <rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="4" fill="var(--primary)" opacity="0.18"/>
+      <rect x="${x}" y="${y2}" width="${barW}" height="${bh2}" rx="4" fill="var(--primary)" opacity="0.85"/>
+      <text x="${x+barW/2}" y="${h+16}" text-anchor="middle" font-size="9" fill="var(--muted)">${v.label}</text>
+      ${bh>8?`<title>${v.label}: ${fmt(v.total,cur)} billed, ${fmt(v.paid,cur)} paid</title>`:""}
+    `;
+  }).join("");
+
+  return `
+    <div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Monthly Revenue (last 6 months)</div>
+        <svg width="${svgW}" height="${h+24}" viewBox="0 0 ${svgW} ${h+24}" style="overflow:visible;">${bars}</svg>
+        <div style="display:flex;gap:14px;margin-top:8px;font-size:0.74rem;color:var(--muted);">
+          <span><span style="display:inline-block;width:10px;height:10px;background:var(--primary);opacity:0.2;border-radius:2px;margin-right:4px;"></span>Billed</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:var(--primary);border-radius:2px;margin-right:4px;"></span>Collected</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:0.82rem;">
+        ${vals.map(v => v.total>0 ? `<div style="display:flex;justify-content:space-between;gap:24px;"><span style="color:var(--muted);">${v.label}</span><span style="font-weight:600;">${fmt(v.total,cur)}</span></div>` : "").join("")}
+      </div>
+    </div>
+  `;
 }
 
 function applyFilters(invoices) {
