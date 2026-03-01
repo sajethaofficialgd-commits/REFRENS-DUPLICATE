@@ -447,6 +447,13 @@ function bindGlobalEvents() {
     if (e.ctrlKey && e.key === "Enter")            { e.preventDefault(); sendInvoice(); }
     if (e.ctrlKey && e.key.toLowerCase() === "p")  { e.preventDefault(); previewPdf(); }
     if (e.ctrlKey && e.key.toLowerCase() === "z")  { e.preventDefault(); undoChange(); }
+    // Prevent Space from scrolling the page when not inside an input/textarea
+    if (e.key === " ") {
+      const tag = document.activeElement?.tagName;
+      if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT") {
+        e.preventDefault();
+      }
+    }
   });
 }
 
@@ -1000,6 +1007,14 @@ function openEditor(invoiceId = null, duplicate = false) {
 function renderEditor() {
   const root = document.getElementById("screenRoot");
   if (!state.editorDraft) return openEditor();
+
+  // Save focus so typing isn't interrupted by re-renders
+  const prev = document.activeElement;
+  const focusId    = prev?.id || null;
+  const focusPath  = prev?.dataset?.path || null;
+  const focusItem  = prev?.dataset?.item  ?? null;
+  const focusField = prev?.dataset?.field || null;
+  const focusSel   = (prev?.selectionStart != null) ? { s: prev.selectionStart, e: prev.selectionEnd } : null;
   const d      = state.editorDraft;
   const t      = calculateTotals(d);
   const clients= getOrgClients();
@@ -1683,6 +1698,19 @@ function renderEditor() {
   `;
 
   bindEditorEvents(t);
+
+  // Restore focus after re-render so typing/Space key isn't interrupted
+  let restored = null;
+  if (focusId)    restored = root.querySelector(`#${CSS.escape(focusId)}`);
+  if (!restored && focusPath)  restored = root.querySelector(`[data-path="${focusPath}"]`);
+  if (!restored && focusItem != null && focusField)
+    restored = root.querySelector(`[data-item="${focusItem}"][data-field="${focusField}"]`);
+  if (restored && typeof restored.focus === "function") {
+    restored.focus({ preventScroll: true });
+    if (focusSel && restored.setSelectionRange) {
+      try { restored.setSelectionRange(focusSel.s, focusSel.e); } catch(_) {}
+    }
+  }
 }
 
 function bindEditorEvents() {
@@ -2062,7 +2090,11 @@ function saveDraft() {
   state.editorDraft       = inv;
   state.ui.editorDirty    = false;
   state.ui.autosaveLabel  = `Saved ${new Date().toLocaleTimeString()}`;
-  saveState(); showToast("Draft saved."); renderEditor();
+  saveState(); showToast("Draft saved.");
+  // Update label without full re-render to preserve focus
+  const lbl = document.querySelector(".autosave-bar span");
+  if (lbl) lbl.textContent = state.ui.autosaveLabel;
+  else renderEditor();
 }
 
 function sendInvoice() {
@@ -2096,7 +2128,10 @@ function startAutosave() {
     state.editorDraft      = inv;
     state.ui.editorDirty   = false;
     state.ui.autosaveLabel = `Autosaved ${new Date().toLocaleTimeString()}`;
-    saveState(); renderEditor();
+    saveState();
+    // Update label in DOM without re-rendering (preserves focus/cursor)
+    const lbl = document.querySelector(".autosave-bar span");
+    if (lbl) lbl.textContent = state.ui.autosaveLabel;
   }, AUTOSAVE_MS);
 }
 
